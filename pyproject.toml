@@ -11,6 +11,12 @@ dependencies = [
   "pydantic-settings>=2.2",
   "python-dotenv>=1.0",
 
+  # Database (async)
+  "sqlalchemy[asyncio]>=2.0",
+  "aiosqlite>=0.20",
+  # Migrations
+  "alembic>=1.13",
+
   # LLM / Graph / Vectorstore (MVP placeholders)
   "langchain>=0.2",
   "langgraph>=0.2",
