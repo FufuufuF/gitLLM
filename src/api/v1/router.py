@@ -1,10 +1,10 @@
 from fastapi import APIRouter
 
-from gitllm.api.v1.sessions import router as sessions_router
-from gitllm.api.v1.threads import router as threads_router
-from gitllm.api.v1.messages import router as messages_router
-from gitllm.api.v1.merges import router as merges_router
-from gitllm.api.v1.settings import router as settings_router
+from src.api.v1.sessions import router as sessions_router
+from src.api.v1.threads import router as threads_router
+from src.api.v1.messages import router as messages_router
+from src.api.v1.merges import router as merges_router
+from src.api.v1.settings import router as settings_router
 
 router = APIRouter()
 

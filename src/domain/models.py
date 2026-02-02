@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from gitllm.domain.enums import MessageRole
+from src.domain.enums import MessageRole
 
 
 @dataclass(frozen=True)

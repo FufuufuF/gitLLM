@@ -6,4 +6,4 @@ PORT="${PORT:-8000}"
 
 echo "[gitLLM] Starting dev server on ${HOST}:${PORT}"
 
-uv run uvicorn gitllm.main:app --reload --host "${HOST}" --port "${PORT}"
+uv run uvicorn src.main:app --reload --host "${HOST}" --port "${PORT}"

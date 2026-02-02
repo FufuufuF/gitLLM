@@ -1,4 +1,4 @@
-from gitllm.core.config import settings
+from src.core.config import settings
 
 
 def get_database_url() -> str:
