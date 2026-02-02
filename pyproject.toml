@@ -1,0 +1,37 @@
+[project]
+name = "gitllm"
+version = "0.1.0"
+description = "gitLLM backend (MVP)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.24",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "python-dotenv>=1.0",
+
+  # LLM / Graph / Vectorstore (MVP placeholders)
+  "langchain>=0.2",
+  "langgraph>=0.2",
+  "chromadb>=0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.4",
+]
+
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gitllm"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

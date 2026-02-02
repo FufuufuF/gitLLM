@@ -1,0 +1,2 @@
+class ThreadService:
+    pass

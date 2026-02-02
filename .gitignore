@@ -1,0 +1,61 @@
+.venv/
+env/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dylib
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local env and secrets
+.env
+.env.*
+secrets.json
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Python local settings
+.python-version
+
+# Temporary files
+*.tmp
+~$*
+
+# Chroma/Vectorstore runtime
+.chromadb/
+.chroma/
+
+# Virtual environment created by uv (already covered by .venv/ but keep explicit)
+.uv/ 
