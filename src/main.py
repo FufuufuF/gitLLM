@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from gitllm.api.v1.router import router as v1_router
-from gitllm.core.logging import configure_logging
+from src.api.v1.router import router as v1_router
+from src.core.logging import configure_logging
 
 
 def create_app() -> FastAPI:
