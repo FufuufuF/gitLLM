@@ -22,7 +22,6 @@ gitLLM/
   .env.example
 
   src/
-    gitllm/
       __init__.py
       main.py
 
