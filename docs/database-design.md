@@ -116,7 +116,7 @@ MVP 必建表（P0 + 登录/注册）：
 用途：登录/注册、资源归属。
 
 字段建议：
-- `id` UUID PK
+- `id` SERIAL PK
 - `username` VARCHAR(64) UNIQUE NOT NULL（MVP：用户名 + 密码注册/登录）
 - `password_hash` TEXT NOT NULL
 - `display_name` VARCHAR(64) NULL
@@ -134,7 +134,7 @@ MVP 必建表（P0 + 登录/注册）：
 用途：自动建议开关等。
 
 字段建议：
-- `user_id` UUID PK, FK -> users(id)
+- `user_id` INT PK, FK -> users(id)
 - `auto_suggest_branch` BOOLEAN NOT NULL DEFAULT TRUE
 - `created_at` TIMESTAMPTZ NOT NULL
 - `updated_at` TIMESTAMPTZ NOT NULL
@@ -146,13 +146,9 @@ MVP 必建表（P0 + 登录/注册）：
 
 用途：实现登录持久化、退出登录、踢下线。
 
-在你决定使用 JWT 的前提下：
-- 如果你只发放“短期 access token（JWT）+ refresh token”，那么这张表通常用于保存 refresh token 的 allowlist（或其 hash），以支持 token 轮换与主动退出。
-- 如果你选择“只有 access token，且不做 refresh / 不需要主动退出能力”，这张表可以暂不落地（但安全性与可控性会下降）。
-
 字段建议：
-- `id` UUID PK
-- `user_id` UUID NOT NULL FK -> users(id)
+- `id` SERIAL PK
+- `user_id` INT NOT NULL FK -> users(id)
 - `token_hash` TEXT NOT NULL UNIQUE（只存 hash，不存明文）
 - `expires_at` TIMESTAMPTZ NOT NULL
 - `revoked_at` TIMESTAMPTZ NULL
@@ -172,8 +168,8 @@ MVP 必建表（P0 + 登录/注册）：
 用途：主线 + 分支的顶层容器，对齐 PRD 的 Session。
 
 字段建议：
-- `id` UUID PK
-- `user_id` UUID NOT NULL FK -> users(id)
+- `id` SERIAL PK
+- `user_id` INT NOT NULL FK -> users(id)
 - `title` VARCHAR(200) NULL
 - `goal` TEXT NULL（可选：显式保存“主线目标”，便于 UI 顶部展示）
 - `status` SMALLINT NOT NULL DEFAULT 1（1=active, 2=archived）
@@ -190,14 +186,14 @@ MVP 必建表（P0 + 登录/注册）：
 用途：承载主线与探究分支，支持嵌套与逐级合并。
 
 字段建议：
-- `id` UUID PK
-- `user_id` UUID NOT NULL FK -> users(id)
-- `chat_session_id` UUID NOT NULL FK -> chat_sessions(id)
-- `parent_thread_id` UUID NULL FK -> threads(id)
+- `id` SERIAL PK
+- `user_id` INT NOT NULL FK -> users(id)
+- `chat_session_id` INT NOT NULL FK -> chat_sessions(id)
+- `parent_thread_id` INT NULL FK -> threads(id)
 - `type` SMALLINT NOT NULL（1=mainline, 2=branch）
 - `status` SMALLINT NOT NULL（1=active, 2=merged, 3=closed_unmerged）
 - `title` VARCHAR(200) NULL（例如“探究：Docker”）
-- `fork_from_message_id` UUID NULL FK -> messages(id)（表示从哪个“节点/消息之后”切出）
+- `fork_from_message_id` INT NULL FK -> messages(id)（表示从哪个“节点/消息之后”切出）
 - `created_at` TIMESTAMPTZ NOT NULL
 - `updated_at` TIMESTAMPTZ NOT NULL
 - `closed_at` TIMESTAMPTZ NULL
@@ -218,10 +214,10 @@ MVP 必建表（P0 + 登录/注册）：
 用途：对话内容、系统卡片、学习简报都统一当做消息存。
 
 字段建议：
-- `id` UUID PK
-- `user_id` UUID NOT NULL FK -> users(id)
-- `chat_session_id` UUID NOT NULL FK -> chat_sessions(id)
-- `thread_id` UUID NOT NULL FK -> threads(id)
+- `id` SERIAL PK
+- `user_id` INT NOT NULL FK -> users(id)
+- `chat_session_id` INT NOT NULL FK -> chat_sessions(id)
+- `thread_id` INT NOT NULL FK -> threads(id)
 - `role` SMALLINT NOT NULL（1=user, 2=assistant, 3=system）
 - `type` SMALLINT NOT NULL（1=normal, 2=branch_suggestion, 3=brief, 4=error）
 - `content` TEXT NOT NULL
@@ -242,28 +238,23 @@ MVP 必建表（P0 + 登录/注册）：
 
 用途：记录“切出分支、合并分支”等关键操作事件。
 
-合理性评估（结论：合理，但建议把它当事件日志而不是事实源）：
-- **事实源仍然是**：`threads`（树结构 + fork 点）与 `messages`（消息内容）。
-- 事件表的价值是：审计/排障、产品埋点、UI 操作历史、幂等与防重（例如合并不重复）。
-- 不建议让业务逻辑依赖“回放事件”来重建当前状态（否则会引入事件溯源的复杂度）。
-
 字段建议（事件建模，推荐）：
-- `id` UUID PK
-- `user_id` UUID NOT NULL FK -> users(id)
-- `chat_session_id` UUID NOT NULL FK -> chat_sessions(id)
+- `id` SERIAL PK
+- `user_id` INT NOT NULL FK -> users(id)
+- `chat_session_id` INT NOT NULL FK -> chat_sessions(id)
 - `op_type` SMALLINT NOT NULL
   - 1=fork（切出分支）
   - 2=merge（合并分支，生成简报）
   - （可选）3=close_unmerged（结束分支不合并）
-- `thread_id` UUID NOT NULL FK -> threads(id)
+- `thread_id` INT NOT NULL FK -> threads(id)
   - fork：新创建的子线程 id
   - merge：被合并的 source_thread_id
   - close：被关闭的 thread_id
-- `related_thread_id` UUID NULL FK -> threads(id)
+- `related_thread_id` INT NULL FK -> threads(id)
   - fork：parent_thread_id
   - merge：target_thread_id
   - close：通常为空
-- `message_id` UUID NULL FK -> messages(id)
+- `message_id` INT NULL FK -> messages(id)
   - fork：fork_from_message_id（从哪条消息节点切出）
   - merge：brief_message_id（合并产出的简报消息）
 - `metadata` JSONB NULL（可选：原因、参数、冲突提示、客户端信息等）

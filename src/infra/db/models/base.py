@@ -17,7 +17,7 @@ class MyORMBase(Base):
         comment="自增主键"
     )
     
-    create_at: Mapped[datetime.datetime] = mapped_column(
+    created_at: Mapped[datetime.datetime] = mapped_column(
         server_default=func.now(),
         comment="创建时间"
     )
