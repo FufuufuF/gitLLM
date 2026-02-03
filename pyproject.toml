@@ -21,6 +21,8 @@ dependencies = [
   "chromadb>=0.5",
   "langchain-community>=0.4.1",
   "dashscope>=1.25.10",
+  "langgraph-checkpoint-postgres>=3.0.4",
+  "asyncpg>=0.31.0",
 ]
 
 [project.optional-dependencies]

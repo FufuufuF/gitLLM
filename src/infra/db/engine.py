@@ -6,7 +6,7 @@ from src.core.config import db_setting as settings
 
 
 def get_database_url() -> str:
-    url = settings.database_url.strip()
+    url = settings.DATABASE_URL.strip()
     return url
 
 
