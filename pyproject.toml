@@ -23,6 +23,7 @@ dependencies = [
   "dashscope>=1.25.10",
   "langgraph-checkpoint-postgres>=3.0.4",
   "asyncpg>=0.31.0",
+  "langchain-openai>=1.1.7",
 ]
 
 [project.optional-dependencies]

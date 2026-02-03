@@ -1,8 +1,8 @@
+from langchain_core.messages import AnyMessage
 from pydantic import BaseModel
-
+from typing import Annotated
+import operator
 
 class GraphState(BaseModel):
-    session_id: str | None = None
-    thread_id: str | None = None
-    input_text: str | None = None
-    output_text: str | None = None
+    messages: Annotated[list[AnyMessage], operator.add]
+    llm_calls: int = 0

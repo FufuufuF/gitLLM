@@ -1,16 +1,16 @@
-from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import SecretStr
-from typing import Optional
 
 from src.llm.provider import get_tongyi_model
 
 def get_model(
-    provider: str,
-    api_key: str,
-    model_name: str,
-    base_url: Optional[str] = None,
+    config: dict
 ):
+    provider = config.get("provider")
+    api_key = config.get("api_key")
+    model_name = config.get("model_name")
+    base_url = config.get("base_url")
+
     if provider == "tongyi":
-        return get_tongyi_model(SecretStr(api_key), model_name)
+        return get_tongyi_model(SecretStr(api_key), model_name, base_url) # type: ignore
     else:
         raise ValueError(f"Unsupported provider: {provider}")
