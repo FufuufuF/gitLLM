@@ -6,9 +6,9 @@ from typing import Optional
 class Setting(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     
-    model_name: str
-    model_base_url: str
-    model_api_key: str
-    model_provider: Optional[str]
+    QWEN_MODEL_NAME: str
+    QWEN_MODEL_BASE_URL: str
+    QWEN_MODEL_API_KEY: str
+    QWEN_MODEL_PROVIDER: Optional[str]
     
 model_setting = Setting() # type: ignore
