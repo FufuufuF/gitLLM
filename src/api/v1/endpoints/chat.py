@@ -37,7 +37,8 @@ async def chat(
             ai_message_id=ai_message.id,
             chat_session_id=chat_request.chat_session_id,
             thread_id=chat_request.thread_id,
-            content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content)
+            human_message=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
+            ai_message=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content)
         )
     )
 

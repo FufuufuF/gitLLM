@@ -10,4 +10,5 @@ class ChatResponse(BaseModel):
     ai_message_id: int
     chat_session_id: int
     thread_id: int
-    content: str
+    human_message: str
+    ai_message: str
