@@ -1,4 +1,3 @@
-import os
 
 from langchain.messages import AIMessage, HumanMessage
 from langgraph.graph.state import RunnableConfig
@@ -10,12 +9,8 @@ from src.infra.db.repositories.model_config import ModelConfigRepository
 from src.infra.checkpoint.postgres import get_postgres_saver
 from src.domain.models import Message, ModelConfig
 from src.graph.graphs.chat_graph import create_chat_graph
-from src.core.config.model_config import model_setting
 from src.core.exceptions import ExternalServiceException, InternalServerException
-
-# MOCK mode: set MOCK_DB=1 to skip real DB and LLM calls
-MOCK_DB = "1"
-
+from src.core.config.model_config import model_setting
 
 class ChatService:
     def __init__(self, db_session: AsyncSession):
@@ -26,33 +21,23 @@ class ChatService:
 
     async def get_model_config(self, model_config_id: int) -> ModelConfig:
         # MOCK
-        return ModelConfig(
+        model_config = ModelConfig(
             id=1,
-            provider=model_setting.QWEN_MODEL_PROVIDER if model_setting.QWEN_MODEL_PROVIDER else "tongyi",
-            api_key=model_setting.QWEN_MODEL_API_KEY,
-            base_url=model_setting.QWEN_MODEL_BASE_URL,
             model_name=model_setting.QWEN_MODEL_NAME,
-            user_id=1,
+            api_key=model_setting.QWEN_MODEL_API_KEY,
+            provider=model_setting.QWEN_MODEL_PROVIDER if model_setting.QWEN_MODEL_PROVIDER else "Tongyi",
+            base_url=model_setting.QWEN_MODEL_BASE_URL,
+            user_id=1
         )
+        return model_config
+        model_config = await self.model_config_repo.get(model_config_id)
+        if not model_config:
+            raise InternalServerException(f"Model config with id {model_config_id} not found")
+        return model_config
 
 
     async def _save_message(self, message: Message) -> Message:
-        """Save message to DB or mock with print."""
-        if MOCK_DB:
-            # Assign a fake ID for mock mode
-            mock_id = hash(message.content) % 100000
-            from datetime import datetime
-            print(f"[MOCK] Saving message: id={mock_id}, role={message.role}, content={message.content[:50]}...")
-            return Message(
-                id=mock_id,
-                role=message.role,
-                content=message.content,
-                chat_session_id=message.chat_session_id,
-                thread_id=message.thread_id,
-                user_id=message.user_id,
-                created_at=datetime.now(),
-            )
-        
+        """Save message to DB."""
         saved = await self.message_repo.add(message)
         if saved is None:
             raise InternalServerException("Failed to save message to database")
@@ -60,7 +45,7 @@ class ChatService:
 
 
     async def _invoke_llm(self, content: str, thread_id: int, model_config: ModelConfig) -> str:
-        """Invoke LLM or return mock response."""
+        """Invoke LLM."""
         
         # Prepare input and config
         graph_input = GraphState(
@@ -79,15 +64,10 @@ class ChatService:
         })
 
         try:
-            if MOCK_DB:
-                print(f"[MOCK] LLM invocation starting (NO DB Persistence)...")
-                agent = create_chat_graph(postgres_saver=None)
+            async with get_postgres_saver() as saver:
+                agent = create_chat_graph(postgres_saver=saver)
+                
                 result = await agent.ainvoke(graph_input, run_config)
-            else:
-                async with get_postgres_saver() as saver:
-                    agent = create_chat_graph(postgres_saver=saver)
-                    
-                    result = await agent.ainvoke(graph_input, run_config)
             
             response_message: AIMessage = result["messages"][-1]
             return str(response_message.content)

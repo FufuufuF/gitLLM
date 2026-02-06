@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,13 +8,24 @@ from fastapi.exceptions import RequestValidationError
 
 from src.api.v1.router import router as v1_router
 from src.core.exceptions import AppException
+from src.infra.db.engine import engine
+from src.infra.db.models import Base  # 导入 Base 会触发所有模型的注册
 
 logger = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理：启动时自动创建数据库表"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables created/verified successfully!")
+    yield
+
+
 def create_app() -> FastAPI:
 
-    app = FastAPI(title="gitLLM", version="0.1.0")
+    app = FastAPI(title="gitLLM", version="0.1.0", lifespan=lifespan)
 
     # Configure CORS
     origins = [

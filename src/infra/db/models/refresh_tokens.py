@@ -11,7 +11,7 @@ class RefreshToken(MyORMBase):
     __tablename__ = "refresh_tokens"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    token_hash: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
