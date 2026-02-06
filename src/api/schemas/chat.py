@@ -11,7 +11,7 @@ class ChatRequest(BaseModel):
 class ChatMessage(BaseModel):
     id: int
     content: str
-    create_time: datetime
+    create_at: datetime
     temp_id: Optional[str] = None
     
 class ChatResponse(BaseModel):
