@@ -41,6 +41,7 @@ class ChatService:
         if MOCK_DB:
             # Assign a fake ID for mock mode
             mock_id = hash(message.content) % 100000
+            from datetime import datetime
             print(f"[MOCK] Saving message: id={mock_id}, role={message.role}, content={message.content[:50]}...")
             return Message(
                 id=mock_id,
@@ -49,6 +50,7 @@ class ChatService:
                 chat_session_id=message.chat_session_id,
                 thread_id=message.thread_id,
                 user_id=message.user_id,
+                created_at=datetime.now(),
             )
         
         saved = await self.message_repo.add(message)
@@ -59,31 +61,33 @@ class ChatService:
 
     async def _invoke_llm(self, content: str, thread_id: int, model_config: ModelConfig) -> str:
         """Invoke LLM or return mock response."""
-        if MOCK_DB:
-            mock_response = f"[MOCK AI Response] Echo: {content}"
-            print(f"[MOCK] LLM invocation skipped. Returning: {mock_response}")
-            return mock_response
         
+        # Prepare input and config
+        graph_input = GraphState(
+            messages=[
+                HumanMessage(content=content),
+            ]
+        )
+        run_config = RunnableConfig({
+            "configurable": {
+                "thread_id": str(thread_id),
+                "model_name": model_config.model_name,
+                "api_key": model_config.api_key,
+                "provider": model_config.provider,
+                "base_url": model_config.base_url,
+            }
+        })
+
         try:
-            async with get_postgres_saver() as saver:
-                agent = create_chat_graph()
-                
-                result = await agent.ainvoke(
-                    GraphState(
-                        messages=[
-                            HumanMessage(content=content),
-                        ]
-                    ),
-                    RunnableConfig({
-                        "configurable": {
-                            "thread_id": str(thread_id),
-                            "model_name": model_config.model_name,
-                            "api_key": model_config.api_key,
-                            "provider": model_config.provider,
-                            "base_url": model_config.base_url,
-                        }
-                    })
-                )
+            if MOCK_DB:
+                print(f"[MOCK] LLM invocation starting (NO DB Persistence)...")
+                agent = create_chat_graph(postgres_saver=None)
+                result = await agent.ainvoke(graph_input, run_config)
+            else:
+                async with get_postgres_saver() as saver:
+                    agent = create_chat_graph(postgres_saver=saver)
+                    
+                    result = await agent.ainvoke(graph_input, run_config)
             
             response_message: AIMessage = result["messages"][-1]
             return str(response_message.content)

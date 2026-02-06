@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
@@ -13,6 +14,20 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
 
     app = FastAPI(title="gitLLM", version="0.1.0")
+
+    # Configure CORS
+    origins = [
+        "http://localhost:5173",
+    ]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(v1_router, prefix="/api/v1")
 
     # ============================================================

@@ -1,14 +1,18 @@
 from pydantic import BaseModel
+from datetime import datetime
 
 class ChatRequest(BaseModel):
     chat_session_id: int
     thread_id: int
     content: str
 
+class ChatMessage(BaseModel):
+    id: int
+    content: str
+    create_time: datetime
+    
 class ChatResponse(BaseModel):
-    human_message_id: int
-    ai_message_id: int
     chat_session_id: int
     thread_id: int
-    human_message: str
-    ai_message: str
+    human_message: ChatMessage
+    ai_message: ChatMessage

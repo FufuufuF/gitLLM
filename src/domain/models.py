@@ -1,6 +1,7 @@
 # MVP
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
+from datetime import datetime
 
 class Message(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -11,7 +12,7 @@ class Message(BaseModel):
     chat_session_id: int
     thread_id: int
     user_id: int
-    created_at: Optional[object] = None # Datetime object
+    created_at: Optional[datetime] = None # Datetime object
 
 class ModelConfig(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -21,7 +22,7 @@ class ModelConfig(BaseModel):
     api_key: str
     base_url: Optional[str] = None
     model_name: str
-    created_at: Optional[object] = None
+    created_at: Optional[datetime] = None
     user_id: int
 
     
