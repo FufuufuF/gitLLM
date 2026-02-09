@@ -25,4 +25,14 @@ class ModelConfig(BaseModel):
     created_at: Optional[datetime] = None
     user_id: int
 
-    
+class ChatSession(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    user_id: int
+    title: Optional[str] = None
+    goal: Optional[str] = None
+    status: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
