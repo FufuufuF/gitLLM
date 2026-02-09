@@ -1,5 +1,5 @@
 from pydantic import BaseModel
 
 
-class SessionOut(BaseModel):
+class ChatSessionOut(BaseModel):
     id: str

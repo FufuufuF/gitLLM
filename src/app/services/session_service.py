@@ -1,2 +1,0 @@
-class SessionService:
-    pass
