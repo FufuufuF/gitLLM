@@ -36,10 +36,14 @@
 
 ### 2.1 需要提供的接口清单
 
-```
-POST   /api/v1/threads/fork          # 切出分支
-POST   /api/v1/threads/{id}/merge    # 合并分支到父线程
-```
+| 接口                                    | 方法  | 说明                         | 优先级 |
+| --------------------------------------- | ----- | ---------------------------- | ------ |
+| `/api/v1/threads/fork`                  | POST  | 切出分支                     | P0     |
+| `/api/v1/threads/{id}/merge`            | POST  | 合并分支到父线程             | P0     |
+| `/api/v1/threads/{id}/context-messages` | GET   | 获取线程上下文消息（带分页） | P0     |
+| `/api/v1/sessions/{id}`                 | PATCH | 切换活跃线程                 | P0     |
+| `/api/v1/threads/{id}/breadcrumb`       | GET   | 获取面包屑导航               | P1     |
+| `/api/v1/sessions/{id}/thread-tree`     | GET   | 获取线程树结构               | P1     |
 
 ---
 
@@ -53,10 +57,9 @@ POST   /api/v1/threads/{id}/merge    # 合并分支到父线程
 # src/api/schemas/thread.py
 
 class ForkThreadRequest(BaseModel):
-    """切出分支请求"""
+    """切出分支请求 从当前线程的最新一条消息中切出"""
     chat_session_id: int              # 所属会话 ID
     parent_thread_id: int             # 父线程 ID（从哪个线程切出）
-    fork_from_message_id: int | None  # 从哪条消息后切出（None 表示从最新位置）
     title: str | None = None          # 分支标题（可选，系统可自动生成）
 ```
 
@@ -126,8 +129,119 @@ class MergeThreadResponse(BaseModel):
    a. 在父线程创建 brief 类型的消息
    b. 更新子线程状态为 merged
    c. 记录 merge 操作到 merges 表（op_type=2）
-   d. 归档子线程的 checkpoint（可选：直接标记或延迟清理）
+   d. 更新 chat_session.active_thread_id 为父线程 ID
+   e. 归档子线程的 checkpoint（可选：直接标记或延迟清理）
 7. 返回合并结果
+```
+
+---
+
+### 2.4 获取线程上下文消息接口
+
+**路由**: `GET /api/v1/threads/{thread_id}/context-messages`
+
+**查询参数**:
+
+| 参数        | 类型   | 必填 | 说明                                       |
+| ----------- | ------ | ---- | ------------------------------------------ |
+| `direction` | string | 是   | `before`（向前翻页）或 `after`（向后翻页） |
+| `cursor`    | string | 否   | 游标（消息 ID），不传表示从最新/最旧开始   |
+| `limit`     | int    | 否   | 每页数量，默认 20，最大 100                |
+
+**响应体 Schema**:
+
+```python
+class ContextMessagesResponse(BaseModel):
+    """线程上下文消息响应"""
+    messages: list[MessageOut]          # 消息列表
+    next_cursor: str | None             # 下一页游标
+    has_more: bool                      # 是否还有更多
+
+class MessageOut(BaseModel):
+    """消息输出"""
+    id: int
+    role: int                           # 1=user, 2=assistant, 3=system
+    type: int                           # 1=normal, 2=suggestion, 3=brief
+    content: str
+    thread_id: int                      # 消息所属线程
+    created_at: datetime
+    metadata: dict | None = None
+```
+
+**业务流程**:
+
+```
+1. 校验权限：user_id 是否有权访问该线程
+2. 构建祖先链：从当前线程递归向上找到主线
+3. 确定每个祖先线程的有效消息范围（基于 fork_from_message_id）
+4. 使用 UNION ALL 合并多个线程的查询
+5. 应用游标和分页限制
+6. 返回消息列表和分页信息
+```
+
+> 详细实现逻辑参见 [游标分页技术指南](./cursor-pagination-guide.md)
+
+---
+
+### 2.5 切换活跃线程接口
+
+**路由**: `GET /api/v1/sessions/{session_id}`
+
+**请求体 Schema**:
+
+```python
+class UpdateSessionRequest(BaseModel):
+    """更新会话请求"""
+    active_thread_id: int | None = None  # 要切换到的线程 ID
+    title: str | None = None             # 更新会话标题（可选）
+```
+
+**响应体 Schema**:
+
+```python
+class UpdateSessionResponse(BaseModel):
+    """更新会话响应"""
+    session_id: int
+    active_thread_id: int
+    updated_at: datetime
+```
+
+**业务流程**:
+
+```
+1. 校验权限：user_id 是否拥有该会话
+2. 校验目标线程：active_thread_id 是否属于该会话
+3. 更新 chat_sessions.active_thread_id
+4. 返回更新后的会话信息
+```
+
+---
+
+### 2.6 获取面包屑导航接口（P1）
+
+**路由**: `GET /api/v1/threads/{thread_id}/breadcrumb`
+
+**响应体 Schema**:
+
+```python
+class BreadcrumbItem(BaseModel):
+    """面包屑项"""
+    thread_id: int
+    title: str
+    thread_type: int                    # 1=mainline, 2=branch
+    status: int                         # 1=active, 2=merged, 3=closed
+
+class BreadcrumbResponse(BaseModel):
+    """面包屑响应"""
+    breadcrumb: list[BreadcrumbItem]    # 从主线到当前线程的路径
+```
+
+**业务流程**:
+
+```
+1. 校验权限
+2. 从当前线程递归向上遍历 parent_thread_id
+3. 返回从主线到当前线程的路径列表
 ```
 
 ---
@@ -142,6 +256,8 @@ class MergeThreadResponse(BaseModel):
 | `BranchService`         | **新增**，封装切出分支和合并分支的核心逻辑     |
 | `CheckpointService`     | **新增**，封装 LangGraph checkpoint 的读写操作 |
 | `BriefGeneratorService` | **新增**，调用 LLM 生成学习简报                |
+| `MessageService`        | **新增**，封装消息上下文查询逻辑               |
+| `SessionService`        | **扩展**，增加 `active_thread_id` 切换方法     |
 
 ---
 
@@ -357,6 +473,162 @@ class ThreadService:
     async def has_active_children(self, thread_id: int) -> bool:
         """检查是否有活跃的子线程"""
         ...
+
+    async def get_breadcrumb(self, thread_id: int) -> list[Thread]:
+        """获取从主线到当前线程的路径"""
+        ...
+```
+
+---
+
+### 3.6 MessageService（新增）
+
+**路径**: `src/app/services/message_service.py`
+
+```python
+from dataclasses import dataclass
+from typing import Literal
+
+@dataclass
+class ThreadRange:
+    """线程的有效消息范围"""
+    thread_id: int
+    start_after_msg_id: int | None  # 该线程消息的起始点（不包含）
+    end_at_msg_id: int | None       # 该线程消息的结束点（包含）
+
+
+class MessageService:
+    """消息查询服务"""
+
+    def __init__(self, db_session: AsyncSession):
+        self.db_session = db_session
+        self.message_repo = MessageRepository(db_session)
+        self.thread_repo = ThreadRepository(db_session)
+
+    async def get_context_messages(
+        self,
+        thread_id: int,
+        cursor: str | None,
+        direction: Literal["before", "after"],
+        limit: int = 20,
+    ) -> dict:
+        """
+        获取线程上下文消息（带分页）。
+
+        核心算法：
+        1. 构建祖先链 ThreadRange 列表
+        2. 使用 UNION ALL 合并各线程的消息查询
+        3. 应用 Fork 点过滤，确保消息连续性
+        4. 应用游标分页
+
+        返回:
+        {
+            "messages": [...],
+            "next_cursor": "123" | None,
+            "has_more": True | False
+        }
+        """
+        # Step 1: 构建祖先链范围
+        ranges = await self._build_ancestor_ranges(thread_id)
+
+        # Step 2-5: 调用 repository 方法执行查询
+        return await self.message_repo.get_context_messages_paginated(
+            ranges=ranges,
+            cursor=cursor,
+            direction=direction,
+            limit=limit,
+        )
+
+    async def _build_ancestor_ranges(
+        self,
+        current_thread_id: int,
+    ) -> list[ThreadRange]:
+        """
+        构建从主线到当前线程的祖先链，并确定每个线程的有效消息范围。
+
+        示例：
+        主线(1) -> 分支A(5, fork_from=3) -> 分支A-1(8, fork_from=7)
+
+        返回:
+        [
+            ThreadRange(1, None, 3),      # 主线：从头到 msg_id=3
+            ThreadRange(5, 3, 7),         # 分支A：msg_id=3 之后到 msg_id=7
+            ThreadRange(8, 7, None),      # 分支A-1：msg_id=7 之后到最新
+        ]
+        """
+        ranges = []
+        stack = []
+
+        current = await self.thread_repo.get(current_thread_id)
+        while current:
+            stack.append({
+                'thread_id': current.id,
+                'fork_from': current.fork_from_message_id,
+            })
+            if current.parent_thread_id:
+                current = await self.thread_repo.get(current.parent_thread_id)
+            else:
+                break
+
+        stack.reverse()
+
+        for i, item in enumerate(stack):
+            if i == len(stack) - 1:
+                ranges.append(ThreadRange(
+                    thread_id=item['thread_id'],
+                    start_after_msg_id=item['fork_from'],
+                    end_at_msg_id=None,
+                ))
+            else:
+                next_fork = stack[i + 1]['fork_from']
+                ranges.append(ThreadRange(
+                    thread_id=item['thread_id'],
+                    start_after_msg_id=item['fork_from'],
+                    end_at_msg_id=next_fork,
+                ))
+
+        return ranges
+```
+
+---
+
+### 3.7 SessionService（扩展）
+
+**路径**: `src/app/services/session_service.py`
+
+需要在现有基础上扩展以下方法：
+
+```python
+class SessionService:
+    """会话服务"""
+
+    async def update_active_thread(
+        self,
+        user_id: int,
+        session_id: int,
+        thread_id: int,
+    ) -> ChatSession:
+        """
+        切换会话的活跃线程。
+
+        校验:
+        1. 用户有权访问该会话
+        2. 目标线程属于该会话
+
+        返回:
+        更新后的 ChatSession
+        """
+        ...
+
+    async def get_session_with_active_thread(
+        self,
+        user_id: int,
+        session_id: int,
+    ) -> ChatSession:
+        """
+        获取会话详情，包含 active_thread_id。
+        """
+        ...
 ```
 
 ---
@@ -554,6 +826,9 @@ class MergeRepository(BaseRepository[MergeModel, Merge]):
 **路径**: `src/infra/db/repositories/messages.py`
 
 ```python
+from typing import Literal
+from sqlalchemy import union_all
+
 class MessageRepository(BaseRepository[MessageModel, Message]):
     """消息仓储"""
 
@@ -562,6 +837,17 @@ class MessageRepository(BaseRepository[MessageModel, Message]):
         ...
 
     # 新增方法
+    async def get_last_message(self, thread_id: int) -> Message | None:
+        """获取指定线程的最后一条消息"""
+        stmt = (
+            select(MessageModel)
+            .where(MessageModel.thread_id == thread_id)
+            .order_by(MessageModel.created_at.desc(), MessageModel.id.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return self.to_entity(result.scalar_one_or_none())
+
     async def get_messages_after(
         self,
         thread_id: int,
@@ -577,7 +863,97 @@ class MessageRepository(BaseRepository[MessageModel, Message]):
         - after_message_id: 起始消息 ID（不包含），None 表示从头开始
         - limit: 限制返回数量（用于 K 轮对话控制）
         """
-        ...
+        stmt = select(MessageModel).where(MessageModel.thread_id == thread_id)
+
+        if after_message_id is not None:
+            stmt = stmt.where(MessageModel.id > after_message_id)
+
+        stmt = stmt.order_by(MessageModel.created_at.asc(), MessageModel.id.asc())
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self.session.execute(stmt)
+        return [self.to_entity(m) for m in result.scalars().all()]
+
+    async def get_context_messages_paginated(
+        self,
+        ranges: list[ThreadRange],
+        cursor: str | None,
+        direction: Literal["before", "after"],
+        limit: int = 20,
+    ) -> dict:
+        """
+        获取跨线程的上下文消息（带分页）。
+
+        参数：
+        - ranges: 祖先链线程范围列表
+        - cursor: 游标（消息 ID）
+        - direction: 翻页方向
+        - limit: 每页数量
+
+        返回：
+        {
+            "messages": [...],
+            "next_cursor": "123" | None,
+            "has_more": True | False
+        }
+
+        详细算法参见: docs/cursor-pagination-guide.md
+        """
+        # 构建 UNION ALL 子查询
+        subqueries = []
+        for r in ranges:
+            q = select(MessageModel).where(MessageModel.thread_id == r.thread_id)
+            if r.start_after_msg_id is not None:
+                q = q.where(MessageModel.id > r.start_after_msg_id)
+            if r.end_at_msg_id is not None:
+                q = q.where(MessageModel.id <= r.end_at_msg_id)
+            subqueries.append(q)
+
+        combined = union_all(*subqueries).subquery()
+
+        # 应用游标
+        query = select(MessageModel).from_statement(select(combined))
+        if cursor:
+            cursor_id = int(cursor)
+            if direction == "before":
+                query = query.where(combined.c.id < cursor_id)
+            else:
+                query = query.where(combined.c.id > cursor_id)
+
+        # 排序和限制
+        if direction == "before":
+            query = query.order_by(combined.c.id.desc())
+        else:
+            query = query.order_by(combined.c.id.asc())
+
+        query = query.limit(limit + 1)
+
+        # 执行查询
+        result = await self.session.execute(query)
+        messages = [self.to_entity(m) for m in result.scalars().all()]
+
+        # 处理结果
+        has_more = len(messages) > limit
+        if has_more:
+            messages = messages[:limit]
+
+        if direction == "before":
+            messages.reverse()
+
+        next_cursor = None
+        if has_more and messages:
+            if direction == "before":
+                next_cursor = str(messages[0].id)
+            else:
+                next_cursor = str(messages[-1].id)
+
+        return {
+            "messages": messages,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
 
     async def create_brief_message(
         self,
@@ -687,18 +1063,21 @@ async def fork_branch(self, ...):
 | `src/app/services/branch_service.py`          | 分支管理核心服务          |
 | `src/app/services/checkpoint_service.py`      | Checkpoint 操作封装       |
 | `src/app/services/brief_generator_service.py` | 简报生成服务              |
+| `src/app/services/message_service.py`         | 消息上下文查询服务        |
 
 ### 7.2 修改文件
 
-| 文件路径                                | 修改内容                                                             |
-| --------------------------------------- | -------------------------------------------------------------------- |
-| `src/domain/models.py`                  | 添加 `Thread`、`Merge`、`Brief` 模型和枚举                           |
-| `src/domain/enums.py`                   | 添加 `ThreadType`、`ThreadStatus`、`MergeOpType`、`MessageType` 枚举 |
-| `src/infra/db/repositories/threads.py`  | 实现 `ThreadRepository`                                              |
-| `src/infra/db/repositories/merges.py`   | 实现 `MergeRepository`                                               |
-| `src/infra/db/repositories/messages.py` | 添加 `get_messages_after`、`create_brief_message` 方法               |
-| `src/app/services/thread_service.py`    | 扩展线程服务方法                                                     |
-| `src/api/v1/router.py`                  | 注册新的路由                                                         |
+| 文件路径                                | 修改内容                                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/domain/models.py`                  | 添加 `Thread`、`Merge`、`Brief`、`ThreadRange` 模型和枚举                                               |
+| `src/infra/db/models/chat_sessions.py`  | 添加 `active_thread_id` 字段                                                                            |
+| `src/infra/db/repositories/threads.py`  | 实现 `ThreadRepository`                                                                                 |
+| `src/infra/db/repositories/merges.py`   | 实现 `MergeRepository`                                                                                  |
+| `src/infra/db/repositories/messages.py` | 添加 `get_last_message`、`get_messages_after`、`get_context_messages_paginated`、`create_brief_message` |
+| `src/app/services/thread_service.py`    | 扩展线程服务方法，添加 `get_breadcrumb`                                                                 |
+| `src/app/services/session_service.py`   | 添加 `update_active_thread`、`get_session_with_active_thread`                                           |
+| `src/api/v1/endpoints/sessions.py`      | 添加 `PATCH` 端点用于切换活跃线程                                                                       |
+| `src/api/v1/router.py`                  | 注册新的路由                                                                                            |
 
 ---
 
@@ -765,6 +1144,8 @@ async def fork_branch(self, ...):
 2. **结束分支不合并 (P0-8)**：`BranchService.close_branch()` 方法
 3. **简报可编辑 (P1-2)**：合并前允许用户修改简报内容
 4. **合并撤销 (P1-5)**：从已归档分支恢复并撤销父线程的简报消息
+
+---
 
 ---
 
