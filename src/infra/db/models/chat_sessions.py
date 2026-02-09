@@ -21,6 +21,7 @@ class ChatSession(MyORMBase):
         onupdate=func.now(),
     )
     deleted_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True))
+    active_thread_id: Mapped[int] = mapped_column(ForeignKey("threads.id"))
 
     __table_args__ = (
         Index("ix_chat_sessions_user_id_created_at", "user_id", "created_at"),

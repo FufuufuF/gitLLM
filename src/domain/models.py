@@ -33,6 +33,7 @@ class ChatSession(BaseModel):
     title: Optional[str] = None
     goal: Optional[str] = None
     status: int
+    active_thread_id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
