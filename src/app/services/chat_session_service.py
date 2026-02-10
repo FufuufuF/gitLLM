@@ -4,7 +4,7 @@ from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.domain.models import ChatSession
 
 
-class SessionService:
+class ChatSessionService:
     """会话服务"""
 
     def __init__(self, db: AsyncSession):

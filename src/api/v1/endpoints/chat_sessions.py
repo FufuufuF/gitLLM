@@ -8,7 +8,7 @@ from src.api.schemas.chat_sessions import (
     ChatSessionItem,
 )
 from src.api.deps import get_current_user_id, db_session
-from src.app.services.chat_session_service import SessionService
+from src.app.services.chat_session_service import ChatSessionService
 
 router = APIRouter()
 
@@ -23,7 +23,7 @@ async def list_sessions(
     获取当前用户的会话列表（游标分页）。
     适用于无限滚动场景。
     """
-    service = SessionService(db)
+    service = ChatSessionService(db)
     result = await service.list_sessions(
         user_id=user_id,
         cursor=request.cursor,
