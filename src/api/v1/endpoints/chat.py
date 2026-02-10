@@ -17,7 +17,7 @@ async def chat(
     db_session: AsyncSession = Depends(get_db_session)
     ) -> BaseResponse[ChatResponse]:
     chat_service = ChatService(db_session)
-    human_message, ai_message = await chat_service.chat(
+    human_message, ai_message, chat_session_id, thread_id = await chat_service.chat(
         user_id, 
         chat_request.chat_session_id, 
         chat_request.thread_id, 
@@ -34,8 +34,8 @@ async def chat(
         code=0,
         message='success',
         data=ChatResponse(
-            chat_session_id=chat_request.chat_session_id,
-            thread_id=chat_request.thread_id,
+            chat_session_id=chat_session_id,  # 使用实际创建的 ID
+            thread_id=thread_id,              # 使用实际创建的 ID
             human_message=ChatMessage(
                 id=human_message.id,
                 content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),

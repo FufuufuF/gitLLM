@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infra.db.repositories.chat_sessions import SessionRepository
+from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.domain.models import ChatSession
 
 
@@ -9,7 +9,7 @@ class SessionService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.session_repo = SessionRepository(db)
+        self.session_repo = ChatSessionRepository(db)
 
     async def list_sessions(
         self,

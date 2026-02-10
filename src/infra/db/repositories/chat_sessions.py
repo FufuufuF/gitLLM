@@ -1,13 +1,13 @@
 import base64
 from datetime import datetime
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, update
 
 from src.infra.db.repositories.base import BaseRepository
 from src.infra.db.models.chat_sessions import ChatSession as ChatSessionModel
 from src.domain.models import ChatSession
 
 
-class SessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
+class ChatSessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
     """会话仓储"""
     model = ChatSessionModel
     schema_class = ChatSession
@@ -77,3 +77,16 @@ class SessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
             next_cursor = base64.urlsafe_b64encode(cursor_str.encode('utf-8')).decode('utf-8')
 
         return [self.to_entity(row) for row in items], next_cursor, has_more # type: ignore
+
+    async def update_active_thread(
+        self,
+        session_id: int,
+        thread_id: int,
+    ) -> None:
+        """更新会话的活跃线程ID"""
+        stmt = (
+            update(ChatSessionModel)
+            .where(ChatSessionModel.id == session_id)
+            .values(active_thread_id=thread_id)
+        )
+        await self.session.execute(stmt)

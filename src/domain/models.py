@@ -32,8 +32,25 @@ class ChatSession(BaseModel):
     user_id: int
     title: Optional[str] = None
     goal: Optional[str] = None
-    status: int
-    active_thread_id: int
+    status: int = 1
+    active_thread_id: Optional[int] = None  # Nullable for initial creation
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
+
+
+class Thread(BaseModel):
+    """线程领域模型"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    user_id: int
+    chat_session_id: int
+    parent_thread_id: Optional[int] = None
+    thread_type: int = 1          # 1=MAINLINE, 2=BRANCH
+    status: int = 1               # 1=ACTIVE, 2=MERGED, 3=CLOSED
+    title: Optional[str] = None
+    fork_from_message_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
