@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy import inspect, insert, text
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import CircularDependencyError
+from sqlalchemy.exc import CircularDependencyError, NoSuchTableError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infra.db.engine import engine
@@ -38,7 +38,11 @@ def _db_columns_signature(conn: Connection, table_names: Iterable[str]) -> dict[
     inspector = inspect(conn)
     signature: dict[str, dict[str, str]] = {}
     for table_name in table_names:
-        columns = inspector.get_columns(table_name)
+        try:
+            columns = inspector.get_columns(table_name)
+        except NoSuchTableError:
+            signature[table_name] = {}
+            continue
         signature[table_name] = {
             column["name"]: _normalize_type_name(column["type"]) for column in columns
         }
