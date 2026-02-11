@@ -3,15 +3,18 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
+from src.domain.enums import MessageType, MessageRole, ThreadType, ThreadStatus
+
 class Message(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
     id: Optional[int] = None
-    role: int
+    role: MessageRole
     content: str | list[str | dict]
     chat_session_id: int
     thread_id: int
     user_id: int
+    type: MessageType
     created_at: Optional[datetime] = None # Datetime object
 
 class ModelConfig(BaseModel):
@@ -50,14 +53,14 @@ class ChatSessionListResult(BaseModel):
 
 class Thread(BaseModel):
     """线程领域模型"""
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
     id: Optional[int] = None
     user_id: int
     chat_session_id: int
     parent_thread_id: Optional[int] = None
-    thread_type: int = 1          # 1=MAINLINE, 2=BRANCH
-    status: int = 1               # 1=ACTIVE, 2=MERGED, 3=CLOSED
+    thread_type: ThreadType = ThreadType.MAIN_LINE
+    status: ThreadStatus = ThreadStatus.NORNAL
     title: Optional[str] = None
     fork_from_message_id: Optional[int] = None
     created_at: Optional[datetime] = None

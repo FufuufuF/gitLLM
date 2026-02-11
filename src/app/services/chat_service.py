@@ -10,6 +10,7 @@ from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.infra.db.repositories.threads import ThreadRepository
 from src.infra.checkpoint.postgres import get_postgres_saver
 from src.domain.models import Message, ModelConfig, ChatSession, Thread
+from src.domain.enums import MessageRole, MessageType
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.core.exceptions import ExternalServiceException, InternalServerException, BadRequestException
 from src.core.config.model_config import model_setting
@@ -161,11 +162,12 @@ class ChatService:
 
         # 2. Save human message
         human_message = Message(
-            role=1,
+            role=MessageRole.USER,
             content=content,
             chat_session_id=chat_session_id,
             thread_id=thread_id,
             user_id=user_id,
+            type=MessageType.CHAT,
         )
         human_message = await self._save_message(human_message)
 
@@ -177,11 +179,12 @@ class ChatService:
 
         # 5. Save AI message
         ai_message = Message(
-            role=2,
+            role=MessageRole.ASSISTANT,
             content=ai_content,
             chat_session_id=chat_session_id,
             thread_id=thread_id,
             user_id=user_id,
+            type=MessageType.CHAT,
         )
         ai_message = await self._save_message(ai_message)
 

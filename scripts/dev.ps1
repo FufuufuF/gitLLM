@@ -1,12 +1,12 @@
 param(
-  [string]$Host = "0.0.0.0",
-  [int]$Port = 8000
+  [string]$ServerHost = "0.0.0.0",
+  [int]$Port = 9090
 )
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "[gitLLM] Starting dev server on $Host:$Port" -ForegroundColor Cyan
+# 使用 ${} 明确变量范围
+Write-Host "[gitLLM] Starting dev server on ${ServerHost}:${Port}" -ForegroundColor Cyan
 
-# Assumes you created/selected a Python 3.12 environment already.
-# Use uv to run the app with the project dependencies.
-uv run uvicorn src.main:app --reload --host $Host --port $Port
+# 运行命令
+uv run uvicorn src.main:app --reload --host $ServerHost --port $Port
