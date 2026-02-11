@@ -12,4 +12,4 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 async def get_current_user_id() -> int:
-    return 0
+    return 1

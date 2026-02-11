@@ -39,6 +39,15 @@ class ChatSession(BaseModel):
     deleted_at: Optional[datetime] = None
 
 
+class ChatSessionListResult(BaseModel):
+    """会话列表结果（游标分页）"""
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[ChatSession]
+    next_cursor: Optional[str] = None
+    has_more: bool
+
+
 class Thread(BaseModel):
     """线程领域模型"""
     model_config = ConfigDict(from_attributes=True)
