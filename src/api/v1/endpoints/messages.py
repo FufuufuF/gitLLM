@@ -5,6 +5,7 @@ from src.api.deps import get_db_session
 from src.api.schemas.base import BaseResponse
 from src.api.schemas.messages import ChatMessage, MessageRequest, MessageResponse
 from src.app.services.message_service import MessageService
+from src.domain.enums import MessageRole
 
 router = APIRouter()
 
@@ -29,7 +30,7 @@ async def list_messages(
                     id=message.id,
                     content=message.content, # type: ignore
                     create_at=message.created_at, # type: ignore
-                    role=message.role
+                    role=MessageRole(message.role)
                 ) for message in messages if message is not None    
             ],
         )

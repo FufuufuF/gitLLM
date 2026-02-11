@@ -1,7 +1,7 @@
-from enum import StrEnum
+from enum import Enum
 
 
-class MessageRole(StrEnum):
-    user = "user"
-    assistant = "assistant"
-    system = "system"
+class MessageRole(Enum):
+    USER = 1,
+    ASSISTANT = 2,
+    BRIEF = 3,

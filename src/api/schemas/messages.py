@@ -2,12 +2,14 @@ from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
 
+from src.domain.enums import MessageRole
+
 class ChatMessage(BaseModel):
     id: Optional[int] = None
     content: str
     create_at: datetime
     temp_id: Optional[str] = None
-    role: int
+    role: MessageRole
 
 class MessageRequest(BaseModel):
     chat_session_id: int

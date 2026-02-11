@@ -7,6 +7,7 @@ from src.api.schemas.base import BaseResponse
 from src.app.services.chat_service import ChatService
 from src.infra.db.session import get_db_session
 from src.core.exceptions import InternalServerException
+from src.domain.enums import MessageRole
 
 router = APIRouter()
 
@@ -41,13 +42,13 @@ async def chat(
                 content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
                 create_at=human_message.created_at,
                 temp_id=chat_request.temp_id,
-                role=1
+                role=MessageRole.USER
             ),
             ai_message=ChatMessage(
                 id=ai_message.id,
                 content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
                 create_at=ai_message.created_at,
-                role=2
+                role=MessageRole.ASSISTANT
             )
         )
     )
