@@ -14,6 +14,7 @@ class Message(MyORMBase):
     thread_id: Mapped[int] = mapped_column(ForeignKey("threads.id"), nullable=False)
     role: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1")
 
     __table_args__ = (
         Index("ix_messages_thread_id_created_at", "thread_id", "created_at"),

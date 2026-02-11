@@ -24,8 +24,8 @@ class ThreadOut(BaseModel):
     id: int
     chat_session_id: int                  # 所属会话（原 ForkThreadResponse.session_id 整合至此）
     parent_thread_id: int | None          # 父线程
-    thread_type: int                      # 1=MAINLINE, 2=BRANCH
-    status: int                           # 1=ACTIVE, 2=MERGED, 3=CLOSED
+    thread_type: int                      # 1=MAIN_LINE, 2=SUB_LINE
+    status: int                           # 1=NORMAL 2=MERGED
     title: str | None
     fork_from_message_id: int | None      # 切出点消息 ID
     created_at: datetime
@@ -335,7 +335,7 @@ MVP 阶段只需两种类型：
 
 | type 值 | 枚举名 | 说明 | 渲染方式 |
 |---|---|---|---|
-| 1 | `NORMAL` | 普通聊天消息（user ↔ assistant） | 标准对话气泡 |
+| 1 | `CHAT` | 普通聊天消息（user ↔ assistant） | 标准对话气泡 |
 | 2 | `BRIEF` | 学习简报（合并分支时生成） | 简报卡片（Markdown 渲染） |
 
 > 后续实现自动建议分支功能时，可新增 `BRANCH_SUGGESTION`(3) 类型。

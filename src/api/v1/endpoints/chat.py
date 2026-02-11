@@ -8,7 +8,7 @@ from src.api.schemas.base import BaseResponse
 from src.app.services.chat_service import ChatService
 from src.infra.db.session import get_db_session
 from src.core.exceptions import InternalServerException
-from src.domain.enums import MessageRole
+from src.domain.enums import MessageRole, MessageType
 
 router = APIRouter()
 
@@ -43,13 +43,15 @@ async def chat(
                 content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
                 create_at=human_message.created_at,
                 temp_id=chat_request.temp_id,
-                role=MessageRole.USER
+                role=MessageRole.USER,
+                type=MessageType.CHAT
             ),
             ai_message=MessageOut(
                 id=ai_message.id,
                 content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
                 create_at=ai_message.created_at,
-                role=MessageRole.ASSISTANT
+                role=MessageRole.ASSISTANT,
+                type=MessageType.CHAT
             )
         )
     )
