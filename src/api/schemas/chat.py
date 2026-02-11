@@ -1,7 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 
-from src.api.schemas.messages import ChatMessage
+from src.api.schemas.messages import MessageOut
 
 class ChatRequest(BaseModel):
     chat_session_id: int
@@ -12,5 +12,5 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     chat_session_id: int
     thread_id: int
-    human_message: ChatMessage
-    ai_message: ChatMessage
+    human_message: MessageOut
+    ai_message: MessageOut

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from src.api.deps import get_current_user_id
 from src.api.deps import get_db_session
 from src.api.schemas.base import BaseResponse
-from src.api.schemas.messages import ChatMessage, MessageRequest, MessageResponse
+from src.api.schemas.messages import MessageOut, MessageRequest, MessageResponse
 from src.app.services.message_service import MessageService
 from src.domain.enums import MessageRole
 
@@ -26,7 +26,7 @@ async def list_messages(
         message='success',
         data=MessageResponse(
             messages=[
-                ChatMessage(
+                MessageOut(
                     id=message.id,
                     content=message.content, # type: ignore
                     create_at=message.created_at, # type: ignore

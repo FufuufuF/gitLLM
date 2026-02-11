@@ -4,7 +4,7 @@ from typing import Optional
 
 from src.domain.enums import MessageRole
 
-class ChatMessage(BaseModel):
+class MessageOut(BaseModel):
     id: Optional[int] = None
     content: str
     create_at: datetime
@@ -18,7 +18,7 @@ class MessageRequest(BaseModel):
     page_size: Optional[int] = 10
 
 class MessageResponse(BaseModel):
-    messages: list[ChatMessage]
+    messages: list[MessageOut]
     total: Optional[int] = None
     page: Optional[int] = None
     page_size: Optional[int] = None

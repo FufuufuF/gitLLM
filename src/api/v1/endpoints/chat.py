@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas.chat import ChatRequest, ChatResponse, ChatMessage
+from src.api.schemas.chat import ChatRequest, ChatResponse
+from src.api.schemas.messages import MessageOut
 from src.api.deps import get_current_user_id
 from src.api.schemas.base import BaseResponse
 from src.app.services.chat_service import ChatService
@@ -37,14 +38,14 @@ async def chat(
         data=ChatResponse(
             chat_session_id=chat_session_id,  # 使用实际创建的 ID
             thread_id=thread_id,              # 使用实际创建的 ID
-            human_message=ChatMessage(
+            human_message=MessageOut(
                 id=human_message.id,
                 content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
                 create_at=human_message.created_at,
                 temp_id=chat_request.temp_id,
                 role=MessageRole.USER
             ),
-            ai_message=ChatMessage(
+            ai_message=MessageOut(
                 id=ai_message.id,
                 content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
                 create_at=ai_message.created_at,
