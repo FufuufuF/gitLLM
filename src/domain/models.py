@@ -66,3 +66,17 @@ class Thread(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
+
+
+class BranchOp(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: Optional[int] = None
+    user_id: int
+    chat_session_id: int
+    op_type: int
+    thread_id: int
+    related_thread_id: Optional[int] = None
+    message_id: Optional[int] = None
+    metadata_: Optional[dict] = None
+    created_at: Optional[datetime] = None

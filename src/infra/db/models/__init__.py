@@ -5,7 +5,7 @@ from src.infra.db.models.refresh_tokens import RefreshToken
 from src.infra.db.models.chat_sessions import ChatSession
 from src.infra.db.models.threads import Thread
 from src.infra.db.models.messages import Message
-from src.infra.db.models.merges import Merge
+from src.infra.db.models.branch_ops import BranchOp
 
 __all__ = [
     "Base",
@@ -16,5 +16,5 @@ __all__ = [
     "ChatSession",
     "Thread",
     "Message",
-    "Merge",
+    "BranchOp",
 ]

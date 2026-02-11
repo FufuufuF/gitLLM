@@ -2,6 +2,7 @@ from sqlalchemy import select, update
 
 from src.infra.db.repositories.base import BaseRepository
 from src.infra.db.models.threads import Thread as ThreadModel
+from src.domain.enums import ThreadStatus, ThreadType
 from src.domain.models import Thread
 
 
@@ -30,9 +31,30 @@ class ThreadRepository(BaseRepository[ThreadModel, Thread]):
         thread = Thread(
             user_id=user_id,
             chat_session_id=chat_session_id,
-            thread_type=1,  # MAINLINE
-            status=1,       # ACTIVE
+            thread_type=ThreadType.MAIN_LINE,
+            status=ThreadStatus.NORNAL,
             title=title,
+        )
+        return await self.add(thread)
+
+    async def create_fork_thread(
+        self,
+        user_id: int,
+        chat_session_id: int,
+        parent_thread_id: int,
+        title: str | None = None,
+        fork_from_message_id: int | None = None,
+        thread_type: ThreadType = ThreadType.SUB_LINE,
+        status: ThreadStatus = ThreadStatus.NORNAL,
+    ) -> Thread:
+        thread = Thread(
+            user_id=user_id,
+            chat_session_id=chat_session_id,
+            parent_thread_id=parent_thread_id,
+            thread_type=thread_type,
+            status=status,
+            title=title,
+            fork_from_message_id=fork_from_message_id,
         )
         return await self.add(thread)
 
