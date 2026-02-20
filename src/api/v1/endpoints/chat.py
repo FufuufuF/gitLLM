@@ -41,7 +41,8 @@ async def chat(
             human_message=MessageOut(
                 id=human_message.id,
                 content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
-                create_at=human_message.created_at,
+                created_at=human_message.created_at,
+                thread_id=thread_id,
                 temp_id=chat_request.temp_id,
                 role=MessageRole.USER,
                 type=MessageType.CHAT
@@ -49,7 +50,8 @@ async def chat(
             ai_message=MessageOut(
                 id=ai_message.id,
                 content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
-                create_at=ai_message.created_at,
+                created_at=ai_message.created_at,
+                thread_id=thread_id,
                 role=MessageRole.ASSISTANT,
                 type=MessageType.CHAT
             )

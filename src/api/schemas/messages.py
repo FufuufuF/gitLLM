@@ -1,16 +1,20 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 from src.domain.enums import MessageRole, MessageType
 
 class MessageOut(BaseModel):
+    """消息通用输出模型"""
+    model_config = ConfigDict(use_enum_values=True)
+
     id: Optional[int] = None
-    content: str
-    create_at: datetime
-    temp_id: Optional[str] = None
     role: MessageRole
     type: MessageType
+    content: str
+    thread_id: int
+    created_at: datetime
+    temp_id: Optional[str] = None
 
 class MessageRequest(BaseModel):
     chat_session_id: int

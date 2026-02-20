@@ -1,19 +1,19 @@
-from enum import Enum
+from enum import IntEnum
 
 
-class MessageRole(Enum):
+class MessageRole(IntEnum):
     USER = 1
     ASSISTANT = 2
     SYSTEM = 3
     
-class MessageType(Enum):
+class MessageType(IntEnum):
     CHAT = 1
     BRIEF = 2
     
-class ThreadType(Enum):
+class ThreadType(IntEnum):
     MAIN_LINE = 1
     SUB_LINE = 2
     
-class ThreadStatus(Enum):
-    NORNAL = 1
+class ThreadStatus(IntEnum):
+    NORMAL = 1
     MERGED = 2

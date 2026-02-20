@@ -1,8 +1,8 @@
 # 记忆分支 API 响应设计评审
 
-更新时间：2026-02-11
+更新时间：2026-02-12
 
-> 本文档针对 [memory-branch-implementation-guide.md](./memory-branch-implementation-guide.md) 中 §2 API 层设计提出的接口清单，逐一评审其**请求/响应**设计，消除冗余字段，统一公共模型，并讨论消息类型体系和接口编排模式。
+> 本文档针对 [memory-branch-implementation-guide.md](./memory-branch-implementation-guide.md) 中 §2 API 层设计提出的接口清单，逐一评审其**请求/响应**设计，消除冗余字段，统一公共模型，并讨论消息类型体系、接口编排模式和接口粒度设计。
 
 ---
 
@@ -11,6 +11,7 @@
 1. **操作即同步** — 写操作（fork / merge / switch）的响应应包含所有被变更实体的新状态，前端一次响应即可完成 UI 刷新
 2. **消除跨模型冗余** — 如果某个字段已存在于公共模型（如 `ThreadOut`）中，不在外层重复声明
 3. **公共模型复用** — `ThreadOut`、`MessageOut` 作为通用输出模型，被所有接口共享
+4. **按依赖关系决定粒度** — 有事务依赖的操作合并到一个接口内完成；无数据依赖的读操作独立为单独接口，前端可并行调用（详见 [§2.0](#20-接口粒度设计)）
 
 ---
 
@@ -58,6 +59,77 @@ class MessageOut(BaseModel):
 
 ## 2. 各接口响应设计
 
+### 2.0 接口粒度设计
+
+用户的每个分支操作都是若干原子动作的复合结果：
+
+| 用户动作 | 原子操作 |
+|---|---|
+| **创建分支** | ① 创建 thread ② 更新 active_thread_id ③ 聚合消息 |
+| **切换分支** | ① 更新 active_thread_id ② 聚合消息 |
+| **合并分支** | ① 合并逻辑 + 生成 brief ② 更新 active_thread_id ③ 聚合消息 |
+
+存在两种设计思路：
+
+- **粗粒度**：一个动作对应一个接口，内部聚合所有原子操作
+- **细粒度**：每个原子操作独立为一个接口，前端通过 `Promise.all()` 并行调用
+
+#### 细粒度方案的时序隐患
+
+并非所有原子操作都可以并行，逐场景分析：
+
+**创建分支**：
+```
+Promise.all([
+  POST /threads/fork,                          // ① 创建 thread → 返回 new_thread_id
+  PATCH /sessions/{id} { active_thread_id },   // ② 需要 new_thread_id → ❌ 依赖 ①
+  GET /threads/{new_id}/context-messages        // ③ 需要 new_thread_id → ❌ 依赖 ①
+])
+```
+不能并行。必须先等 fork 返回 `new_thread_id`，再发起后两个请求，变成两轮网络请求。而 fork service 内部已经在做 `update_active_thread`，拆出去反而多一轮。
+
+**切换分支**：
+```
+Promise.all([
+  PATCH /sessions/{id} { active_thread_id: target_id },   // ①
+  GET /threads/{target_id}/context-messages                 // ②
+])
+```
+`target_id` 前端已知，两个请求无数据依赖。**可以并行** ✅
+
+**合并分支**：
+合并操作中的 `更新 active_thread_id` **必须在 confirm 事务内完成**，不能拆成独立请求。因为合并状态变更（子线程 MERGED + 父线程注入 brief + active_thread_id 切换）需要强一致性。如果拆成独立请求，合并成功但 active_thread_id 更新失败，会话状态就不一致了。confirm 返回后，前端单独调用 `GET /threads/{parent_id}/context-messages` 加载消息。
+
+#### 决策：混合方案
+
+按**数据依赖**和**事务性要求**决定粒度，而非一刀切：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 有事务依赖的写操作 → 合并到一个接口内完成                      │
+│ 无数据依赖的读操作 → 独立接口，前端并行调用                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| 场景 | 接口编排 | 模式 |
+|---|---|---|
+| **创建分支** | `POST /threads/fork`（内部完成：创建 thread + 更新 active_thread_id） → `GET /context-messages` | 串行（有依赖） |
+| **切换分支** | `PATCH /sessions/{id}` ∥ `GET /context-messages` | 并行（无依赖） |
+| **合并分支** | preview → confirm（内部完成：合并 + 更新 active_thread_id + 写入 brief） → `GET /context-messages` | 串行（有依赖） |
+
+**方案对比总结**：
+
+| 维度 | 纯粗粒度（一动作一接口） | 纯细粒度（Promise.all） | 混合方案（推荐） |
+|---|---|---|---|
+| 事务安全性 | ✅ | ❌ 有风险 | ✅ |
+| 前端复杂度 | 低 | 高 | 低 |
+| 接口复用性 | 低 | 最高 | 高 |
+| 网络请求数 | 最少 | 最多 | 适中 |
+
+> `context-messages` 是唯一被拆出的独立读接口，它在创建分支、切换分支、合并分支、首次进入会话、滚动加载历史等场景中复用，收益最大。
+
+---
+
 ### 2.1 `POST /api/v1/threads/fork` — 切出分支
 
 #### 请求体
@@ -76,7 +148,10 @@ class ForkThreadResponse(BaseModel):
     thread: ThreadOut                     # 新分支完整信息
 ```
 
-**设计决策**：fork 操作必然将 `active_thread_id` 切换到新分支，这是确定性行为，无需在响应中冗余返回。前端收到 `thread.id` 后自行更新本地状态即可。
+**设计决策**：
+- fork 操作**内部同时完成**创建 thread + 更新 `active_thread_id`（有事务依赖，不可拆分，参见 [§2.0](#20-接口粒度设计)）
+- 响应不冗余返回 `active_thread_id`，前端收到 `thread.id` 后自行更新本地状态
+- 前端收到响应后**串行调用** `GET /threads/{new_id}/context-messages` 加载消息（因为需要 `new_thread_id`，不能并行）
 
 #### 冗余消除说明
 
@@ -169,7 +244,8 @@ async with get_postgres_saver() as saver:
 **设计决策**：
 - 学习简报是纯文本（Markdown），存储在 `content` 字段中，不使用结构化 JSON
 - 响应不包含 `active_thread_id`，因为合并必然切换到父线程，前端从 `target_thread.id` 推断
-- confirm 后前端需调用 `GET /threads/{target_id}/context-messages` 加载父线程消息
+- `active_thread_id` 更新**必须在 confirm 事务内部完成**，不可拆为独立接口（合并状态变更需要强一致性，参见 [§2.0](#20-接口粒度设计)）
+- confirm 后前端**串行调用** `GET /threads/{target_id}/context-messages` 加载父线程消息（需要确认合并成功后才能加载）
 - **双写顺序**：先写业务库（事务内），再写 checkpoint（事务外）；checkpoint 写入失败时业务库已提交，由补偿机制处理
 
 ---
@@ -207,9 +283,8 @@ class ContextMessagesResponse(BaseModel):
 
 ### 2.4 `PATCH /api/v1/sessions/{id}` — 切换活跃线程
 
-这是讨论最多的接口，核心问题是：
-
-> **"切换线程"这个用户动作 = 切换 active_thread_id + 加载目标线程的消息，需要两个接口调用，是否合适？**
+> 切换线程是三种操作中**唯一适合前端 `Promise.all` 并行调用**的场景（参见 [§2.0](#20-接口粒度设计)）。
+> 因为 `target_id` 前端已知，PATCH 和 GET 之间无数据依赖，可以安全并行。
 
 #### 方案对比
 
@@ -237,6 +312,8 @@ class ContextMessagesResponse(BaseModel):
    用户感知到的是**一次操作**，实际延迟取决于较慢的那个请求（通常是 context-messages），PATCH 本身极快。
 
 3. **context-messages 接口的复用性** — 它不仅在"切换线程"时使用，还在首次进入会话、滚动加载历史等场景独立使用。如果把它嵌入 PATCH 响应，这些场景还是要单独调。
+
+4. **与其他场景的对比** — fork 和 merge 中 `active_thread_id` 更新必须在写操作内部事务性完成（因为有数据依赖），但切换场景中 `target_id` 前端已知，不存在此约束，所以可以分离。
 
 #### 请求体
 
@@ -407,6 +484,8 @@ ALTER TABLE messages ADD COLUMN type SMALLINT NOT NULL DEFAULT 1;
 | D5 | 消息类型体系 | **MVP 只用 NORMAL + BRIEF** | `type` 字段区分，简单够用 |
 | D6 | 切换线程接口设计 | **方案 A：分离调用** | PATCH 切换 + GET 拉消息，前端并行发起，职责分离 |
 | D7 | 简报如何注入 LLM 上下文 | **`aupdate_state` 注入 checkpoint** | 利用 LangGraph 原生 API 向父线程 checkpoint 追加 SystemMessage，不触发 LLM 调用 |
+| D8 | 接口粒度：细粒度 vs 粗粒度 | **混合方案** | 有事务依赖的写操作（fork / merge 中的 active_thread_id 更新）合并到主接口内部；无依赖的读操作（context-messages）独立为复用接口 |
+| D9 | 哪些场景支持 Promise.all 并行 | **仅切换分支** | fork 和 merge 有数据依赖（需要先获取 new_thread_id / 需要事务一致性），只能串行；切换分支的 target_id 前端已知，可安全并行 |
 
 ---
 

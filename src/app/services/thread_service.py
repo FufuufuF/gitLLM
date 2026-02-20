@@ -37,7 +37,7 @@ class ThreadService:
             raise NotFoundException("Parent thread not found")
         if parent_thread.user_id != user_id or parent_thread.chat_session_id != chat_session_id:
             raise ForbiddenException("Parent thread does not belong to this session")
-        if parent_thread.status != ThreadStatus.NORNAL:
+        if parent_thread.status != ThreadStatus.NORMAL:
             raise BadRequestException("Parent thread is not active")
 
         fork_from_message_id = await self.message_repo.get_latest_message_id(
@@ -58,7 +58,7 @@ class ThreadService:
             title=title,
             fork_from_message_id=fork_from_message_id,
             thread_type=ThreadType.SUB_LINE,
-            status=ThreadStatus.NORNAL,
+            status=ThreadStatus.NORMAL,
         )
 
         await self.checkpoint_service.create_checkpoint_from_state(

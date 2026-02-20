@@ -28,8 +28,9 @@ async def list_messages(
             messages=[
                 MessageOut(
                     id=message.id,
-                    content=message.content, # type: ignore
-                    create_at=message.created_at, # type: ignore
+                    content=message.content if isinstance(message.content, str) else str(message.content),
+                    created_at=message.created_at, # type: ignore
+                    thread_id=message.thread_id,
                     role=MessageRole(message.role),
                     type=MessageType(message.type)
                 ) for message in messages if message is not None    

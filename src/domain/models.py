@@ -60,7 +60,7 @@ class Thread(BaseModel):
     chat_session_id: int
     parent_thread_id: Optional[int] = None
     thread_type: ThreadType = ThreadType.MAIN_LINE
-    status: ThreadStatus = ThreadStatus.NORNAL
+    status: ThreadStatus = ThreadStatus.NORMAL
     title: Optional[str] = None
     fork_from_message_id: Optional[int] = None
     created_at: Optional[datetime] = None

@@ -8,6 +8,13 @@ from src.api.schemas.chat_sessions import (
     ChatSessionItem,
 )
 from src.api.schemas.base import BaseResponse
+from src.api.schemas.threads import (
+    ThreadOut,
+    ThreadTreeNode,
+    ThreadTreeResponse,
+    UpdateSessionRequest,
+    UpdateSessionResponse,
+)
 from src.api.deps import get_current_user_id, db_session
 from src.app.services.chat_session_service import ChatSessionService
 
@@ -20,10 +27,7 @@ async def list_sessions(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(db_session),
 ) -> BaseResponse[ChatSessionListResponse]:
-    """
-    获取当前用户的会话列表（游标分页）。
-    适用于无限滚动场景。
-    """
+    """获取当前用户的会话列表（游标分页）"""
     service = ChatSessionService(db)
     result = await service.list_sessions(
         user_id=user_id,
@@ -31,7 +35,6 @@ async def list_sessions(
         limit=request.limit,
     )
 
-    # 将 domain entity 转换为 API schema
     items = [
         ChatSessionItem(
             id=item.id, # type: ignore
@@ -53,4 +56,66 @@ async def list_sessions(
             next_cursor=result.next_cursor,
             has_more=result.has_more,
         )
+    )
+
+
+@router.patch("/{session_id}", response_model=BaseResponse[UpdateSessionResponse])
+async def update_session(
+    session_id: int,
+    request: UpdateSessionRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(db_session),
+) -> BaseResponse[UpdateSessionResponse]:
+    """更新会话（切换活跃线程 / 更新标题）"""
+    service = ChatSessionService(db)
+    updated_session, active_thread = await service.update_session(
+        user_id=user_id,
+        session_id=session_id,
+        active_thread_id=request.active_thread_id,
+        title=request.title,
+    )
+
+    return BaseResponse(
+        code=0,
+        message="success",
+        data=UpdateSessionResponse(
+            session_id=updated_session.id,  # type: ignore
+            title=updated_session.title,
+            active_thread_id=updated_session.active_thread_id,  # type: ignore
+            active_thread=ThreadOut(
+                id=active_thread.id,  # type: ignore
+                chat_session_id=active_thread.chat_session_id,
+                parent_thread_id=active_thread.parent_thread_id,
+                thread_type=active_thread.thread_type,
+                status=active_thread.status,
+                title=active_thread.title,
+                fork_from_message_id=active_thread.fork_from_message_id,
+                created_at=active_thread.created_at,  # type: ignore
+            ),
+            updated_at=updated_session.updated_at,  # type: ignore
+        ),
+    )
+
+
+@router.get("/{session_id}/thread-tree", response_model=BaseResponse[ThreadTreeResponse])
+async def get_thread_tree(
+    session_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(db_session),
+) -> BaseResponse[ThreadTreeResponse]:
+    """获取会话的线程树结构"""
+    service = ChatSessionService(db)
+    sid, active_tid, nodes = await service.get_thread_tree(user_id, session_id)
+
+    return BaseResponse(
+        code=0,
+        message="success",
+        data=ThreadTreeResponse(
+            session_id=sid,
+            active_thread_id=active_tid,
+            threads=[
+                ThreadTreeNode(**node)
+                for node in nodes
+            ],
+        ),
     )

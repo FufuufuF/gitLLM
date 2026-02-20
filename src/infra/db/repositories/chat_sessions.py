@@ -90,3 +90,33 @@ class ChatSessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
             .values(active_thread_id=thread_id)
         )
         await self.session.execute(stmt)
+
+    async def update_session(
+        self,
+        session_id: int,
+        active_thread_id: int | None = None,
+        title: str | None = None,
+    ) -> ChatSession | None:
+        """
+        更新会话字段（active_thread_id / title），返回更新后的实体。
+        只更新非 None 的字段。
+        """
+        values: dict = {}
+        if active_thread_id is not None:
+            values["active_thread_id"] = active_thread_id
+        if title is not None:
+            values["title"] = title
+
+        if not values:
+            return await self.get(session_id)
+
+        stmt = (
+            update(ChatSessionModel)
+            .where(ChatSessionModel.id == session_id)
+            .values(**values)
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+        # 重新查询返回最新状态
+        return await self.get(session_id)

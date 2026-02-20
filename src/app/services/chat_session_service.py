@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.infra.db.repositories.threads import ThreadRepository
-from src.domain.models import ChatSession, ChatSessionListResult
+from src.domain.models import ChatSession, ChatSessionListResult, Thread
 
 
 class ChatSessionService:
@@ -80,3 +81,106 @@ class ChatSessionService:
             next_cursor=next_cursor,
             has_more=has_more,
         )
+
+    async def update_session(
+        self,
+        user_id: int,
+        session_id: int,
+        active_thread_id: int | None = None,
+        title: str | None = None,
+    ) -> tuple[ChatSession, Thread]:
+        """
+        更新会话（切换活跃线程 / 更新标题）。
+
+        Returns:
+            (updated_session, active_thread)
+        """
+        session = await self.session_repo.get(session_id)
+        if session is None:
+            raise NotFoundException("Chat session not found")
+        if session.user_id != user_id:
+            raise ForbiddenException("No permission to access this session")
+
+        # 如果要切换线程，校验目标线程属于该会话
+        if active_thread_id is not None:
+            target_thread = await self.thread_repo.get(active_thread_id)
+            if target_thread is None:
+                raise NotFoundException("Target thread not found")
+            if target_thread.chat_session_id != session_id:
+                raise BadRequestException("Thread does not belong to this session")
+
+        updated = await self.session_repo.update_session(
+            session_id=session_id,
+            active_thread_id=active_thread_id,
+            title=title,
+        )
+        if updated is None:
+            raise NotFoundException("Session not found after update")
+
+        # 查询活跃线程信息
+        thread = await self.thread_repo.get(updated.active_thread_id)  # type: ignore
+        if thread is None:
+            raise NotFoundException("Active thread not found")
+
+        return updated, thread
+
+    async def get_thread_tree(
+        self,
+        user_id: int,
+        session_id: int,
+    ) -> tuple[int, int, list[dict]]:
+        """
+        获取会话的线程树结构。
+
+        Returns:
+            (session_id, active_thread_id, thread_nodes)
+        """
+        session = await self.session_repo.get(session_id)
+        if session is None:
+            raise NotFoundException("Chat session not found")
+        if session.user_id != user_id:
+            raise ForbiddenException("No permission to access this session")
+
+        threads = await self.thread_repo.get_threads_by_session(session_id)
+        msg_counts = await self.thread_repo.get_thread_message_counts(session_id)
+        children_counts = await self.thread_repo.get_thread_children_counts(session_id)
+
+        nodes = []
+        for t in threads:
+            nodes.append({
+                "thread_id": t.id,
+                "parent_thread_id": t.parent_thread_id,
+                "title": t.title,
+                "thread_type": t.thread_type,
+                "status": t.status,
+                "fork_from_message_id": t.fork_from_message_id,
+                "created_at": t.created_at,
+                "closed_at": t.closed_at,
+                "message_count": msg_counts.get(t.id, 0),  # type: ignore
+                "children_count": children_counts.get(t.id, 0),  # type: ignore
+            })
+
+        return session_id, session.active_thread_id, nodes  # type: ignore
+
+    async def get_breadcrumb(
+        self,
+        user_id: int,
+        thread_id: int,
+    ) -> list[Thread]:
+        """
+        获取面包屑导航（从当前线程到主线的祖先链）。
+
+        Returns:
+            list[Thread] — 顺序: [主线, ..., 父线程, 当前线程]
+        """
+        chain = await self.thread_repo.get_ancestor_chain(thread_id)
+        if not chain:
+            raise NotFoundException("Thread not found")
+
+        # 校验权限
+        if chain[0].user_id != user_id:
+            raise ForbiddenException("No permission to access this thread")
+
+        # 反转：从主线到当前线程
+        chain.reverse()
+        return chain

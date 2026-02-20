@@ -5,6 +5,7 @@ from src.domain.enums import ThreadType, ThreadStatus
 
 
 class ThreadOut(BaseModel):
+    """线程通用输出模型 — 所有涉及线程的接口复用此 Schema"""
     model_config = ConfigDict(use_enum_values=True)
 
     id: int
@@ -16,11 +17,102 @@ class ThreadOut(BaseModel):
     fork_from_message_id: int | None
     created_at: datetime
 
+
+# ── Fork ──
+
 class ForkThreadRequest(BaseModel):
     chat_session_id: int
     parent_thread_id: int
     title: str | None = None
-    # 只能从parent最新的消息切出分支
 
 class ForkThreadResponse(BaseModel):
     thread: ThreadOut
+
+
+# ── Merge ──
+
+class MergePreviewResponse(BaseModel):
+    thread_id: int
+    target_thread_id: int
+    brief_content: str
+
+class MergeConfirmRequest(BaseModel):
+    brief_content: str
+
+class MergeConfirmResponse(BaseModel):
+    merged_thread: ThreadOut
+    target_thread: ThreadOut
+    brief_message: "MessageOutForThread"
+
+class MessageOutForThread(BaseModel):
+    """内联消息输出，避免循环引用"""
+    id: int
+    role: int
+    type: int
+    content: str
+    thread_id: int
+    created_at: datetime
+
+
+# ── Context Messages ──
+
+class ContextMessagesResponse(BaseModel):
+    messages: list[MessageOutForThread]
+    next_cursor: str | None
+    has_more: bool
+
+
+# ── Update Session ──
+
+class UpdateSessionRequest(BaseModel):
+    active_thread_id: int | None = None
+    title: str | None = None
+
+class UpdateSessionResponse(BaseModel):
+    session_id: int
+    title: str | None
+    active_thread_id: int
+    active_thread: ThreadOut
+    updated_at: datetime
+
+
+# ── Breadcrumb (P1) ──
+
+class BreadcrumbItem(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    thread_id: int
+    title: str | None
+    thread_type: ThreadType
+    status: ThreadStatus
+    fork_from_message_id: int | None
+
+class BreadcrumbResponse(BaseModel):
+    breadcrumb: list[BreadcrumbItem]
+    current_thread_id: int
+
+
+# ── Thread Tree (P1) ──
+
+class ThreadTreeNode(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    thread_id: int
+    parent_thread_id: int | None
+    title: str | None
+    thread_type: ThreadType
+    status: ThreadStatus
+    fork_from_message_id: int | None
+    created_at: datetime
+    closed_at: datetime | None
+    message_count: int
+    children_count: int
+
+class ThreadTreeResponse(BaseModel):
+    session_id: int
+    active_thread_id: int
+    threads: list[ThreadTreeNode]
+
+
+# Rebuild MergeConfirmResponse to resolve forward reference
+MergeConfirmResponse.model_rebuild()
