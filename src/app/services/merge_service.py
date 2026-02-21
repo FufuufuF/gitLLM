@@ -28,10 +28,7 @@ def _load_brief_prompt() -> str:
     try:
         return _BRIEF_PROMPT_PATH.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return (
-            "Please write a concise learning brief summarizing the following conversation. "
-            "Use Markdown format. Include key conclusions and actionable steps."
-        )
+        raise FileNotFoundError("Brief prompt not found")
 
 
 class MergeService:
