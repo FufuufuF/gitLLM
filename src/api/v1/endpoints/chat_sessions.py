@@ -66,7 +66,7 @@ async def update_session(
 ) -> BaseResponse[UpdateSessionResponse]:
     """更新会话（切换活跃线程 / 更新标题）"""
     service = ChatSessionService(db)
-    updated_session, active_thread = await service.update_session(
+    active_thread = await service.update_session(
         user_id=user_id,
         chat_session_id=chat_session_id,
         active_thread_id=request.active_thread_id,
@@ -77,9 +77,6 @@ async def update_session(
         code=0,
         message="success",
         data=UpdateSessionResponse(
-            chat_session_id=updated_session.id,  # type: ignore
-            title=updated_session.title,
-            active_thread_id=updated_session.active_thread_id,  # type: ignore
             active_thread=ThreadOut(
                 id=active_thread.id,  # type: ignore
                 chat_session_id=active_thread.chat_session_id,
@@ -90,7 +87,6 @@ async def update_session(
                 fork_from_message_id=active_thread.fork_from_message_id,
                 created_at=active_thread.created_at,  # type: ignore
             ),
-            updated_at=updated_session.updated_at,  # type: ignore
         ),
     )
 

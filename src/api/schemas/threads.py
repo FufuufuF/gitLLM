@@ -62,11 +62,7 @@ class UpdateSessionRequest(BaseModel):
     title: str | None = None
 
 class UpdateSessionResponse(BaseModel):
-    chat_session_id: int
-    title: str | None
-    active_thread_id: int
     active_thread: ThreadOut
-    updated_at: datetime
 
 
 # ── Breadcrumb (P1) ──

@@ -88,12 +88,12 @@ class ChatSessionService:
         chat_session_id: int,
         active_thread_id: int | None = None,
         title: str | None = None,
-    ) -> tuple[ChatSession, Thread]:
+    ) -> Thread:
         """
         更新会话（切换活跃线程 / 更新标题）。
 
         Returns:
-            (updated_session, active_thread)
+            Thread: 更新后的活跃线程
         """
         session = await self.session_repo.get(chat_session_id)
         if session is None:
@@ -122,7 +122,7 @@ class ChatSessionService:
         if thread is None:
             raise NotFoundException("Active thread not found")
 
-        return updated, thread
+        return thread
 
     async def get_thread_tree(
         self,
