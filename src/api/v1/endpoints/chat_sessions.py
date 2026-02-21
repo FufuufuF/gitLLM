@@ -10,8 +10,6 @@ from src.api.schemas.chat_sessions import (
 from src.api.schemas.base import BaseResponse
 from src.api.schemas.threads import (
     ThreadOut,
-    ThreadTreeNode,
-    ThreadTreeResponse,
     UpdateSessionRequest,
     UpdateSessionResponse,
 )
@@ -96,26 +94,3 @@ async def update_session(
         ),
     )
 
-
-@router.get("/{session_id}/thread-tree", response_model=BaseResponse[ThreadTreeResponse])
-async def get_thread_tree(
-    session_id: int,
-    user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(db_session),
-) -> BaseResponse[ThreadTreeResponse]:
-    """获取会话的线程树结构"""
-    service = ChatSessionService(db)
-    sid, active_tid, nodes = await service.get_thread_tree(user_id, session_id)
-
-    return BaseResponse(
-        code=0,
-        message="success",
-        data=ThreadTreeResponse(
-            session_id=sid,
-            active_thread_id=active_tid,
-            threads=[
-                ThreadTreeNode(**node)
-                for node in nodes
-            ],
-        ),
-    )

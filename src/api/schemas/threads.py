@@ -2,6 +2,7 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 from src.domain.enums import ThreadType, ThreadStatus
+from src.api.schemas.messages import MessageOut
 
 
 class ThreadOut(BaseModel):
@@ -42,22 +43,14 @@ class MergeConfirmRequest(BaseModel):
 class MergeConfirmResponse(BaseModel):
     merged_thread: ThreadOut
     target_thread: ThreadOut
-    brief_message: "MessageOutForThread"
-
-class MessageOutForThread(BaseModel):
-    """内联消息输出，避免循环引用"""
-    id: int
-    role: int
-    type: int
-    content: str
-    thread_id: int
-    created_at: datetime
+    brief_message: MessageOut
 
 
 # ── Context Messages ──
 
+
 class ContextMessagesResponse(BaseModel):
-    messages: list[MessageOutForThread]
+    messages: list[MessageOut]
     next_cursor: str | None
     has_more: bool
 
@@ -92,27 +85,8 @@ class BreadcrumbResponse(BaseModel):
     current_thread_id: int
 
 
-# ── Thread Tree (P1) ──
+# ── Thread List (P1) ──
 
-class ThreadTreeNode(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
+class ThreadsListResponse(BaseModel):
+    threads: list[ThreadOut]
 
-    thread_id: int
-    parent_thread_id: int | None
-    title: str | None
-    thread_type: ThreadType
-    status: ThreadStatus
-    fork_from_message_id: int | None
-    created_at: datetime
-    closed_at: datetime | None
-    message_count: int
-    children_count: int
-
-class ThreadTreeResponse(BaseModel):
-    session_id: int
-    active_thread_id: int
-    threads: list[ThreadTreeNode]
-
-
-# Rebuild MergeConfirmResponse to resolve forward reference
-MergeConfirmResponse.model_rebuild()

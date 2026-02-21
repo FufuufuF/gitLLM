@@ -19,6 +19,14 @@ class ThreadService:
         self.branch_op_repo = BranchOpRepository(db)
         self.checkpoint_service = CheckpointService()
 
+    async def get_threads(self, user_id: int, chat_session_id: int) -> list[Thread]:
+        session = await self.session_repo.get(chat_session_id)
+        if session is None:
+            raise NotFoundException("Chat session not found")
+        if session.user_id != user_id:
+            raise ForbiddenException("No permission to access this session")
+        return await self.thread_repo.get_threads_by_session(chat_session_id)
+
     async def fork_thread(
         self,
         user_id: int,

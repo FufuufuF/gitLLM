@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_current_user_id
 from src.api.schemas.base import BaseResponse
+from src.api.schemas.messages import MessageOut
 from src.api.schemas.threads import (
     BreadcrumbItem,
     BreadcrumbResponse,
@@ -12,8 +13,8 @@ from src.api.schemas.threads import (
     MergeConfirmRequest,
     MergeConfirmResponse,
     MergePreviewResponse,
-    MessageOutForThread,
     ThreadOut,
+    ThreadsListResponse,
 )
 from src.app.services.chat_session_service import ChatSessionService
 from src.app.services.merge_service import MergeService
@@ -125,7 +126,7 @@ async def merge_confirm(
                 fork_from_message_id=target_thread.fork_from_message_id,
                 created_at=target_thread.created_at,  # type: ignore
             ),
-            brief_message=MessageOutForThread(
+            brief_message=MessageOut(
                 id=brief_message.id,  # type: ignore
                 role=brief_message.role,  # type: ignore[arg-type]
                 type=brief_message.type,  # type: ignore[arg-type]
@@ -162,7 +163,7 @@ async def get_context_messages(
         message="success",
         data=ContextMessagesResponse(
             messages=[
-                MessageOutForThread(
+                MessageOut(
                     id=m.id,  # type: ignore
                     role=m.role,  # type: ignore[arg-type]
                     type=m.type,  # type: ignore[arg-type]
@@ -174,6 +175,40 @@ async def get_context_messages(
             ],
             next_cursor=next_cursor,
             has_more=has_more,
+        ),
+    )
+
+
+# ── Threads ──
+
+
+@router.get("/{chat_session_id}/list", response_model=BaseResponse[ThreadsListResponse])
+async def get_threads(
+    chat_session_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db_session: AsyncSession = Depends(get_db_session),
+) -> BaseResponse[ThreadsListResponse]:
+    """获取会话下的线程列表"""
+    service = ThreadService(db_session)
+    threads = await service.get_threads(user_id, chat_session_id)
+
+    return BaseResponse(
+        code=0,
+        message="success",
+        data=ThreadsListResponse(
+            threads=[
+                ThreadOut(
+                    id=t.id,  # type: ignore
+                    chat_session_id=t.chat_session_id,
+                    parent_thread_id=t.parent_thread_id,
+                    thread_type=t.thread_type,
+                    status=t.status,
+                    title=t.title,
+                    fork_from_message_id=t.fork_from_message_id,
+                    created_at=t.created_at,  # type: ignore
+                )
+                for t in threads
+            ],
         ),
     )
 
