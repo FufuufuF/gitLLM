@@ -62,7 +62,7 @@ class UpdateSessionRequest(BaseModel):
     title: str | None = None
 
 class UpdateSessionResponse(BaseModel):
-    session_id: int
+    chat_session_id: int
     title: str | None
     active_thread_id: int
     active_thread: ThreadOut

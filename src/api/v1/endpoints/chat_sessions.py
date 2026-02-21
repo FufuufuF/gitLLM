@@ -57,9 +57,9 @@ async def list_sessions(
     )
 
 
-@router.patch("/{session_id}", response_model=BaseResponse[UpdateSessionResponse])
+@router.patch("/{chat_session_id}", response_model=BaseResponse[UpdateSessionResponse])
 async def update_session(
-    session_id: int,
+    chat_session_id: int,
     request: UpdateSessionRequest,
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(db_session),
@@ -68,7 +68,7 @@ async def update_session(
     service = ChatSessionService(db)
     updated_session, active_thread = await service.update_session(
         user_id=user_id,
-        session_id=session_id,
+        chat_session_id=chat_session_id,
         active_thread_id=request.active_thread_id,
         title=request.title,
     )
@@ -77,7 +77,7 @@ async def update_session(
         code=0,
         message="success",
         data=UpdateSessionResponse(
-            session_id=updated_session.id,  # type: ignore
+            chat_session_id=updated_session.id,  # type: ignore
             title=updated_session.title,
             active_thread_id=updated_session.active_thread_id,  # type: ignore
             active_thread=ThreadOut(

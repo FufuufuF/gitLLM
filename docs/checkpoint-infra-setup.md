@@ -123,7 +123,7 @@ async def run_agent_with_checkpoint():
         graph = build_graph()
         app = graph.compile(checkpointer=checkpointer)
 
-        # 配置 thread_id (关联到业务 session_id)
+        # 配置 thread_id (关联到业务 chat_session_id)
         config = {"configurable": {"thread_id": "session_user_123"}}
 
         # 调用

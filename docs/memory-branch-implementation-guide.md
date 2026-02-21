@@ -185,7 +185,7 @@ class MessageOut(BaseModel):
 
 ### 2.5 切换活跃线程接口
 
-**路由**: `GET /api/v1/sessions/{session_id}`
+**路由**: `GET /api/v1/sessions/{chat_session_id}`
 
 **请求体 Schema**:
 
@@ -201,7 +201,7 @@ class UpdateSessionRequest(BaseModel):
 ```python
 class UpdateSessionResponse(BaseModel):
     """更新会话响应"""
-    session_id: int
+    chat_session_id: int
     active_thread_id: int
     updated_at: datetime
 ```
@@ -605,7 +605,7 @@ class SessionService:
     async def update_active_thread(
         self,
         user_id: int,
-        session_id: int,
+        chat_session_id: int,
         thread_id: int,
     ) -> ChatSession:
         """
@@ -623,7 +623,7 @@ class SessionService:
     async def get_session_with_active_thread(
         self,
         user_id: int,
-        session_id: int,
+        chat_session_id: int,
     ) -> ChatSession:
         """
         获取会话详情，包含 active_thread_id。

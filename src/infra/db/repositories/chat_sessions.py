@@ -80,20 +80,20 @@ class ChatSessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
 
     async def update_active_thread(
         self,
-        session_id: int,
+        chat_session_id: int,
         thread_id: int,
     ) -> None:
         """更新会话的活跃线程ID"""
         stmt = (
             update(ChatSessionModel)
-            .where(ChatSessionModel.id == session_id)
+            .where(ChatSessionModel.id == chat_session_id)
             .values(active_thread_id=thread_id)
         )
         await self.session.execute(stmt)
 
     async def update_session(
         self,
-        session_id: int,
+        chat_session_id: int,
         active_thread_id: int | None = None,
         title: str | None = None,
     ) -> ChatSession | None:
@@ -108,15 +108,15 @@ class ChatSessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
             values["title"] = title
 
         if not values:
-            return await self.get(session_id)
+            return await self.get(chat_session_id)
 
         stmt = (
             update(ChatSessionModel)
-            .where(ChatSessionModel.id == session_id)
+            .where(ChatSessionModel.id == chat_session_id)
             .values(**values)
         )
         await self.session.execute(stmt)
         await self.session.flush()
 
         # 重新查询返回最新状态
-        return await self.get(session_id)
+        return await self.get(chat_session_id)

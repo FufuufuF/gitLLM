@@ -172,7 +172,7 @@ class MergeService:
 
         # Step 5: 更新 session.active_thread_id → 父线程
         await self.session_repo.update_active_thread(
-            session_id=thread.chat_session_id,
+            chat_session_id=thread.chat_session_id,
             thread_id=parent_thread.id,  # type: ignore
         )
 

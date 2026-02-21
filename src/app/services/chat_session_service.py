@@ -49,7 +49,7 @@ class ChatSessionService:
 
         # 3. 回写 active_thread_id
         await self.session_repo.update_active_thread(
-            session_id=created_session.id,  # type: ignore
+            chat_session_id=created_session.id,  # type: ignore
             thread_id=mainline_thread.id,   # type: ignore
         )
         created_session.active_thread_id = mainline_thread.id
@@ -85,7 +85,7 @@ class ChatSessionService:
     async def update_session(
         self,
         user_id: int,
-        session_id: int,
+        chat_session_id: int,
         active_thread_id: int | None = None,
         title: str | None = None,
     ) -> tuple[ChatSession, Thread]:
@@ -95,7 +95,7 @@ class ChatSessionService:
         Returns:
             (updated_session, active_thread)
         """
-        session = await self.session_repo.get(session_id)
+        session = await self.session_repo.get(chat_session_id)
         if session is None:
             raise NotFoundException("Chat session not found")
         if session.user_id != user_id:
@@ -106,11 +106,11 @@ class ChatSessionService:
             target_thread = await self.thread_repo.get(active_thread_id)
             if target_thread is None:
                 raise NotFoundException("Target thread not found")
-            if target_thread.chat_session_id != session_id:
+            if target_thread.chat_session_id != chat_session_id:
                 raise BadRequestException("Thread does not belong to this session")
 
         updated = await self.session_repo.update_session(
-            session_id=session_id,
+            chat_session_id=chat_session_id,
             active_thread_id=active_thread_id,
             title=title,
         )
@@ -127,23 +127,23 @@ class ChatSessionService:
     async def get_thread_tree(
         self,
         user_id: int,
-        session_id: int,
+        chat_session_id: int,
     ) -> tuple[int, int, list[dict]]:
         """
         获取会话的线程树结构。
 
         Returns:
-            (session_id, active_thread_id, thread_nodes)
+            (chat_session_id, active_thread_id, thread_nodes)
         """
-        session = await self.session_repo.get(session_id)
+        session = await self.session_repo.get(chat_session_id)
         if session is None:
             raise NotFoundException("Chat session not found")
         if session.user_id != user_id:
             raise ForbiddenException("No permission to access this session")
 
-        threads = await self.thread_repo.get_threads_by_session(session_id)
-        msg_counts = await self.thread_repo.get_thread_message_counts(session_id)
-        children_counts = await self.thread_repo.get_thread_children_counts(session_id)
+        threads = await self.thread_repo.get_threads_by_session(chat_session_id)
+        msg_counts = await self.thread_repo.get_thread_message_counts(chat_session_id)
+        children_counts = await self.thread_repo.get_thread_children_counts(chat_session_id)
 
         nodes = []
         for t in threads:
@@ -160,7 +160,7 @@ class ChatSessionService:
                 "children_count": children_counts.get(t.id, 0),  # type: ignore
             })
 
-        return session_id, session.active_thread_id, nodes  # type: ignore
+        return chat_session_id, session.active_thread_id, nodes  # type: ignore
 
     async def get_breadcrumb(
         self,

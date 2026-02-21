@@ -39,12 +39,12 @@
 
 ### 错误码
 
-| HTTP 状态码 | 含义 |
-|---|---|
-| 400 | 请求参数错误 / 业务约束不满足（如逐级合并约束） |
-| 403 | 无权限访问该资源 |
-| 404 | 资源不存在 |
-| 500 | 服务器内部错误 |
+| HTTP 状态码 | 含义                                            |
+| ----------- | ----------------------------------------------- |
+| 400         | 请求参数错误 / 业务约束不满足（如逐级合并约束） |
+| 403         | 无权限访问该资源                                |
+| 404         | 资源不存在                                      |
+| 500         | 服务器内部错误                                  |
 
 ---
 
@@ -62,11 +62,11 @@ Authorization: Bearer <token>
 
 **请求体**：
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `chat_session_id` | int | 是 | 所属会话 ID |
-| `parent_thread_id` | int | 是 | 从哪个线程切出 |
-| `title` | string \| null | 否 | 分支标题 |
+| 字段               | 类型           | 必填 | 说明           |
+| ------------------ | -------------- | ---- | -------------- |
+| `chat_session_id`  | int            | 是   | 所属会话 ID    |
+| `parent_thread_id` | int            | 是   | 从哪个线程切出 |
+| `title`            | string \| null | 否   | 分支标题       |
 
 ```json
 {
@@ -132,11 +132,11 @@ Authorization: Bearer <token>
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `thread_id` | int | 待合并的分支 ID |
-| `target_thread_id` | int | 合并目标（父线程）ID |
-| `brief_content` | string | LLM 生成的学习简报（Markdown 格式），用户可编辑 |
+| 字段               | 类型   | 说明                                            |
+| ------------------ | ------ | ----------------------------------------------- |
+| `thread_id`        | int    | 待合并的分支 ID                                 |
+| `target_thread_id` | int    | 合并目标（父线程）ID                            |
+| `brief_content`    | string | LLM 生成的学习简报（Markdown 格式），用户可编辑 |
 
 ### 校验规则
 
@@ -162,9 +162,9 @@ Authorization: Bearer <token>
 
 **请求体**：
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `brief_content` | string | 是 | 用户确认/编辑后的学习简报文本 |
+| 字段            | 类型   | 必填 | 说明                          |
+| --------------- | ------ | ---- | ----------------------------- |
+| `brief_content` | string | 是   | 用户确认/编辑后的学习简报文本 |
 
 ```json
 {
@@ -211,10 +211,10 @@ Authorization: Bearer <token>
 }
 ```
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `merged_thread` | ThreadOut | 被合并的分支（`status` 已变为 `MERGED`(2)） |
-| `target_thread` | ThreadOut | 目标父线程 |
+| 字段            | 类型       | 说明                                                          |
+| --------------- | ---------- | ------------------------------------------------------------- |
+| `merged_thread` | ThreadOut  | 被合并的分支（`status` 已变为 `MERGED`(2)）                   |
+| `target_thread` | ThreadOut  | 目标父线程                                                    |
 | `brief_message` | MessageOut | 已写入父线程的学习简报消息（`role=3/system`, `type=2/BRIEF`） |
 
 ### 内部执行步骤
@@ -245,11 +245,11 @@ Authorization: Bearer <token>
 
 **查询参数**：
 
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|---|---|---|---|---|
-| `direction` | string | 否 | `"before"` | `before`（最新→旧）或 `after`（旧→最新） |
-| `cursor` | string | 否 | null | 游标（消息 ID），不传表示从最新/最旧开始 |
-| `limit` | int | 否 | 20 | 每页数量，范围 `[1, 100]` |
+| 参数        | 类型   | 必填 | 默认值     | 说明                                     |
+| ----------- | ------ | ---- | ---------- | ---------------------------------------- |
+| `direction` | string | 否   | `"before"` | `before`（最新→旧）或 `after`（旧→最新） |
+| `cursor`    | string | 否   | null       | 游标（消息 ID），不传表示从最新/最旧开始 |
+| `limit`     | int    | 否   | 20         | 每页数量，范围 `[1, 100]`                |
 
 ### 响应
 
@@ -311,17 +311,17 @@ Authorization: Bearer <token>
 ### 请求
 
 ```
-PATCH /api/v1/chat_sessions/{session_id}
+PATCH /api/v1/chat_sessions/{chat_session_id}
 Content-Type: application/json
 Authorization: Bearer <token>
 ```
 
 **请求体**：
 
-| 字段 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `active_thread_id` | int \| null | 否 | 要切换到的线程 ID |
-| `title` | string \| null | 否 | 更新会话标题 |
+| 字段               | 类型           | 必填 | 说明              |
+| ------------------ | -------------- | ---- | ----------------- |
+| `active_thread_id` | int \| null    | 否   | 要切换到的线程 ID |
+| `title`            | string \| null | 否   | 更新会话标题      |
 
 至少提供一个字段。
 
@@ -338,7 +338,7 @@ Authorization: Bearer <token>
   "code": 0,
   "message": "success",
   "data": {
-    "session_id": 1,
+    "chat_session_id": 1,
     "title": "后端部署",
     "active_thread_id": 5,
     "active_thread": {
@@ -413,7 +413,7 @@ Authorization: Bearer <token>
 ### 请求
 
 ```
-GET /api/v1/chat_sessions/{session_id}/thread-tree
+GET /api/v1/chat_sessions/{chat_session_id}/thread-tree
 Authorization: Bearer <token>
 ```
 
@@ -424,7 +424,7 @@ Authorization: Bearer <token>
   "code": 0,
   "message": "success",
   "data": {
-    "session_id": 1,
+    "chat_session_id": 1,
     "active_thread_id": 1,
     "threads": [
       {
@@ -472,16 +472,16 @@ fork 有数据依赖（需要 new_thread_id），不能并行。
 
 ```typescript
 // 串行调用
-const forkRes = await api.post('/threads/fork', {
+const forkRes = await api.post("/threads/fork", {
   chat_session_id: sessionId,
   parent_thread_id: currentThreadId,
-  title: '探究 Docker',
+  title: "探究 Docker",
 });
 const newThreadId = forkRes.data.thread.id;
 
 // fork 完成后再加载消息
 const messagesRes = await api.get(
-  `/threads/${newThreadId}/context-messages?direction=before&limit=20`
+  `/threads/${newThreadId}/context-messages?direction=before&limit=20`,
 );
 renderMessages(messagesRes.data.messages);
 ```
@@ -499,7 +499,7 @@ const [sessionRes, messagesRes] = await Promise.all([
     active_thread_id: targetThreadId,
   }),
   api.get(
-    `/threads/${targetThreadId}/context-messages?direction=before&limit=20`
+    `/threads/${targetThreadId}/context-messages?direction=before&limit=20`,
   ),
 ]);
 
@@ -527,7 +527,7 @@ const confirmRes = await api.post(`/threads/${branchId}/merge/confirm`, {
 // Step 3: 加载父线程消息
 const parentId = confirmRes.data.target_thread.id;
 const messagesRes = await api.get(
-  `/threads/${parentId}/context-messages?direction=before&limit=20`
+  `/threads/${parentId}/context-messages?direction=before&limit=20`,
 );
 renderMessages(messagesRes.data.messages);
 ```
@@ -537,7 +537,7 @@ renderMessages(messagesRes.data.messages);
 ```typescript
 // 利用 context-messages 的游标分页
 const res = await api.get(
-  `/threads/${threadId}/context-messages?direction=before&cursor=${lastCursor}&limit=20`
+  `/threads/${threadId}/context-messages?direction=before&cursor=${lastCursor}&limit=20`,
 );
 prependMessages(res.data.messages);
 
@@ -554,43 +554,43 @@ if (res.data.has_more) {
 
 ### ThreadType
 
-| 值 | 枚举名 | 说明 |
-|---|---|---|
-| 1 | `MAIN_LINE` | 主线线程 |
-| 2 | `SUB_LINE` | 子线程（分支） |
+| 值  | 枚举名      | 说明           |
+| --- | ----------- | -------------- |
+| 1   | `MAIN_LINE` | 主线线程       |
+| 2   | `SUB_LINE`  | 子线程（分支） |
 
 ### ThreadStatus
 
-| 值 | 枚举名 | 说明 |
-|---|---|---|
-| 1 | `NORMAL` | 活跃 |
-| 2 | `MERGED` | 已合并 |
+| 值  | 枚举名   | 说明   |
+| --- | -------- | ------ |
+| 1   | `NORMAL` | 活跃   |
+| 2   | `MERGED` | 已合并 |
 
 ### MessageRole
 
-| 值 | 枚举名 | 说明 |
-|---|---|---|
-| 1 | `USER` | 用户消息 |
-| 2 | `ASSISTANT` | AI 回复 |
-| 3 | `SYSTEM` | 系统消息（含简报） |
+| 值  | 枚举名      | 说明               |
+| --- | ----------- | ------------------ |
+| 1   | `USER`      | 用户消息           |
+| 2   | `ASSISTANT` | AI 回复            |
+| 3   | `SYSTEM`    | 系统消息（含简报） |
 
 ### MessageType
 
-| 值 | 枚举名 | 说明 |
-|---|---|---|
-| 1 | `CHAT` / `NORMAL` | 普通聊天消息 |
-| 2 | `BRIEF` | 学习简报（合并时生成） |
+| 值  | 枚举名            | 说明                   |
+| --- | ----------------- | ---------------------- |
+| 1   | `CHAT` / `NORMAL` | 普通聊天消息           |
+| 2   | `BRIEF`           | 学习简报（合并时生成） |
 
 ---
 
 ## 接口总览
 
-| 接口 | 方法 | 路径 | 核心用途 |
-|---|---|---|---|
-| 创建分支 | POST | `/api/v1/threads/fork` | 从指定线程切出子分支 |
-| 合并预览 | POST | `/api/v1/threads/{id}/merge/preview` | 生成学习简报预览（只读） |
-| 确认合并 | POST | `/api/v1/threads/{id}/merge/confirm` | 执行合并（事务性写操作） |
-| 上下文消息 | GET | `/api/v1/threads/{id}/context-messages` | 跨线程消息聚合（游标分页） |
-| 更新会话 | PATCH | `/api/v1/chat_sessions/{id}` | 切换活跃线程 / 更新标题 |
-| 面包屑 | GET | `/api/v1/threads/{id}/breadcrumb` | 主线→当前线程的路径导航 |
-| 线程树 | GET | `/api/v1/chat_sessions/{id}/thread-tree` | 会话下的完整线程结构 |
+| 接口       | 方法  | 路径                                     | 核心用途                   |
+| ---------- | ----- | ---------------------------------------- | -------------------------- |
+| 创建分支   | POST  | `/api/v1/threads/fork`                   | 从指定线程切出子分支       |
+| 合并预览   | POST  | `/api/v1/threads/{id}/merge/preview`     | 生成学习简报预览（只读）   |
+| 确认合并   | POST  | `/api/v1/threads/{id}/merge/confirm`     | 执行合并（事务性写操作）   |
+| 上下文消息 | GET   | `/api/v1/threads/{id}/context-messages`  | 跨线程消息聚合（游标分页） |
+| 更新会话   | PATCH | `/api/v1/chat_sessions/{id}`             | 切换活跃线程 / 更新标题    |
+| 面包屑     | GET   | `/api/v1/threads/{id}/breadcrumb`        | 主线→当前线程的路径导航    |
+| 线程树     | GET   | `/api/v1/chat_sessions/{id}/thread-tree` | 会话下的完整线程结构       |

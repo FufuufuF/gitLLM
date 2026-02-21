@@ -23,7 +23,7 @@
 class ThreadOut(BaseModel):
     """线程通用输出模型 — 所有涉及线程的接口复用此 Schema"""
     id: int
-    chat_session_id: int                  # 所属会话（原 ForkThreadResponse.session_id 整合至此）
+    chat_session_id: int                  # 所属会话（原 ForkThreadResponse.chat_session_id 整合至此）
     parent_thread_id: int | None          # 父线程
     thread_type: int                      # 1=MAIN_LINE, 2=SUB_LINE
     status: int                           # 1=NORMAL 2=MERGED
@@ -33,6 +33,7 @@ class ThreadOut(BaseModel):
 ```
 
 **设计说明**：
+
 - `chat_session_id` 来自 Thread 领域模型本身具有的字段，不是外挂
 - `parent_thread_id` / `fork_from_message_id` 是 fork 关系的自然描述，无需在 Response 外层重复
 
@@ -50,6 +51,7 @@ class MessageOut(BaseModel):
 ```
 
 **设计决策**：
+
 - 学习简报（BRIEF）的内容直接存放在 `content` 字段中（Markdown 格式纯文本），不使用结构化 JSON
 - 不需要 `metadata` 字段，前端通过 `type` 区分渲染样式即可
 
@@ -63,10 +65,10 @@ class MessageOut(BaseModel):
 
 用户的每个分支操作都是若干原子动作的复合结果：
 
-| 用户动作 | 原子操作 |
-|---|---|
-| **创建分支** | ① 创建 thread ② 更新 active_thread_id ③ 聚合消息 |
-| **切换分支** | ① 更新 active_thread_id ② 聚合消息 |
+| 用户动作     | 原子操作                                                   |
+| ------------ | ---------------------------------------------------------- |
+| **创建分支** | ① 创建 thread ② 更新 active_thread_id ③ 聚合消息           |
+| **切换分支** | ① 更新 active_thread_id ② 聚合消息                         |
 | **合并分支** | ① 合并逻辑 + 生成 brief ② 更新 active_thread_id ③ 聚合消息 |
 
 存在两种设计思路：
@@ -79,6 +81,7 @@ class MessageOut(BaseModel):
 并非所有原子操作都可以并行，逐场景分析：
 
 **创建分支**：
+
 ```
 Promise.all([
   POST /threads/fork,                          // ① 创建 thread → 返回 new_thread_id
@@ -86,15 +89,18 @@ Promise.all([
   GET /threads/{new_id}/context-messages        // ③ 需要 new_thread_id → ❌ 依赖 ①
 ])
 ```
+
 不能并行。必须先等 fork 返回 `new_thread_id`，再发起后两个请求，变成两轮网络请求。而 fork service 内部已经在做 `update_active_thread`，拆出去反而多一轮。
 
 **切换分支**：
+
 ```
 Promise.all([
   PATCH /sessions/{id} { active_thread_id: target_id },   // ①
   GET /threads/{target_id}/context-messages                 // ②
 ])
 ```
+
 `target_id` 前端已知，两个请求无数据依赖。**可以并行** ✅
 
 **合并分支**：
@@ -111,20 +117,20 @@ Promise.all([
 └─────────────────────────────────────────────────────────────┘
 ```
 
-| 场景 | 接口编排 | 模式 |
-|---|---|---|
-| **创建分支** | `POST /threads/fork`（内部完成：创建 thread + 更新 active_thread_id） → `GET /context-messages` | 串行（有依赖） |
-| **切换分支** | `PATCH /sessions/{id}` ∥ `GET /context-messages` | 并行（无依赖） |
+| 场景         | 接口编排                                                                                           | 模式           |
+| ------------ | -------------------------------------------------------------------------------------------------- | -------------- |
+| **创建分支** | `POST /threads/fork`（内部完成：创建 thread + 更新 active_thread_id） → `GET /context-messages`    | 串行（有依赖） |
+| **切换分支** | `PATCH /sessions/{id}` ∥ `GET /context-messages`                                                   | 并行（无依赖） |
 | **合并分支** | preview → confirm（内部完成：合并 + 更新 active_thread_id + 写入 brief） → `GET /context-messages` | 串行（有依赖） |
 
 **方案对比总结**：
 
-| 维度 | 纯粗粒度（一动作一接口） | 纯细粒度（Promise.all） | 混合方案（推荐） |
-|---|---|---|---|
-| 事务安全性 | ✅ | ❌ 有风险 | ✅ |
-| 前端复杂度 | 低 | 高 | 低 |
-| 接口复用性 | 低 | 最高 | 高 |
-| 网络请求数 | 最少 | 最多 | 适中 |
+| 维度       | 纯粗粒度（一动作一接口） | 纯细粒度（Promise.all） | 混合方案（推荐） |
+| ---------- | ------------------------ | ----------------------- | ---------------- |
+| 事务安全性 | ✅                       | ❌ 有风险               | ✅               |
+| 前端复杂度 | 低                       | 高                      | 低               |
+| 接口复用性 | 低                       | 最高                    | 高               |
+| 网络请求数 | 最少                     | 最多                    | 适中             |
 
 > `context-messages` 是唯一被拆出的独立读接口，它在创建分支、切换分支、合并分支、首次进入会话、滚动加载历史等场景中复用，收益最大。
 
@@ -149,18 +155,19 @@ class ForkThreadResponse(BaseModel):
 ```
 
 **设计决策**：
+
 - fork 操作**内部同时完成**创建 thread + 更新 `active_thread_id`（有事务依赖，不可拆分，参见 [§2.0](#20-接口粒度设计)）
 - 响应不冗余返回 `active_thread_id`，前端收到 `thread.id` 后自行更新本地状态
 - 前端收到响应后**串行调用** `GET /threads/{new_id}/context-messages` 加载消息（因为需要 `new_thread_id`，不能并行）
 
 #### 冗余消除说明
 
-| 原方案字段 | 处理 | 说明 |
-|---|---|---|
-| `parent_thread_id` | 移除 | 已在 `thread.parent_thread_id` 中 |
-| `fork_from_message_id` | 移除 | 已在 `thread.fork_from_message_id` 中 |
-| `session_id` | 移除 | 已在 `thread.chat_session_id` 中 |
-| `active_thread_id` | 移除 | fork 必然切换，前端从 `thread.id` 推断 |
+| 原方案字段             | 处理 | 说明                                   |
+| ---------------------- | ---- | -------------------------------------- |
+| `parent_thread_id`     | 移除 | 已在 `thread.parent_thread_id` 中      |
+| `fork_from_message_id` | 移除 | 已在 `thread.fork_from_message_id` 中  |
+| `chat_session_id`      | 移除 | 已在 `thread.chat_session_id` 中       |
+| `active_thread_id`     | 移除 | fork 必然切换，前端从 `thread.id` 推断 |
 
 ---
 
@@ -230,7 +237,7 @@ from langchain.messages import SystemMessage
 async with get_postgres_saver() as saver:
     agent = create_chat_graph(postgres_saver=saver)
     config = {"configurable": {"thread_id": str(parent_thread_id)}}
-    
+
     # GraphState.messages 使用 operator.add 作为 reducer
     # SystemMessage 会被追加到父线程已有的 checkpoint 消息列表末尾
     await agent.aupdate_state(
@@ -242,6 +249,7 @@ async with get_postgres_saver() as saver:
 **原理**：`GraphState.messages` 定义了 `Annotated[list[AnyMessage], operator.add]`，`aupdate_state` 会读取当前 checkpoint → 应用 reducer（追加 SystemMessage）→ 写入新 checkpoint。整个过程不经过 graph 节点，不调用 LLM。
 
 **设计决策**：
+
 - 学习简报是纯文本（Markdown），存储在 `content` 字段中，不使用结构化 JSON
 - 响应不包含 `active_thread_id`，因为合并必然切换到父线程，前端从 `target_thread.id` 推断
 - `active_thread_id` 更新**必须在 confirm 事务内部完成**，不可拆为独立接口（合并状态变更需要强一致性，参见 [§2.0](#20-接口粒度设计)）
@@ -254,11 +262,11 @@ async with get_postgres_saver() as saver:
 
 #### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `direction` | string | 是 | `before`（向前）或 `after`（向后） |
-| `cursor` | string | 否 | 游标（消息 ID），不传表示从最新/最旧开始 |
-| `limit` | int | 否 | 每页数量，默认 20，最大 100 |
+| 参数        | 类型   | 必填 | 说明                                     |
+| ----------- | ------ | ---- | ---------------------------------------- |
+| `direction` | string | 是   | `before`（向前）或 `after`（向后）       |
+| `cursor`    | string | 否   | 游标（消息 ID），不传表示从最新/最旧开始 |
+| `limit`     | int    | 否   | 每页数量，默认 20，最大 100              |
 
 #### 响应体
 
@@ -288,11 +296,11 @@ class ContextMessagesResponse(BaseModel):
 
 #### 方案对比
 
-| 方案 | 描述 | 优点 | 缺点 |
-|---|---|---|---|
-| **A. 分离调用** | PATCH 切换 + GET context-messages，前端并行调用 | 职责分离，RESTful；context-messages 可独立复用 | 两次网络请求 |
-| **B. 合并响应** | PATCH 切换时返回第一页消息 | 一次请求完成 | 切换接口职责膨胀；如果只更新 title 不需要消息 |
-| **C. 隐式切换** | 去掉 PATCH 接口，在 GET context-messages 中用 side-effect 更新 active_thread_id | 最少请求 | GET 有写副作用，违反 REST 语义 |
+| 方案            | 描述                                                                            | 优点                                           | 缺点                                          |
+| --------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| **A. 分离调用** | PATCH 切换 + GET context-messages，前端并行调用                                 | 职责分离，RESTful；context-messages 可独立复用 | 两次网络请求                                  |
+| **B. 合并响应** | PATCH 切换时返回第一页消息                                                      | 一次请求完成                                   | 切换接口职责膨胀；如果只更新 title 不需要消息 |
+| **C. 隐式切换** | 去掉 PATCH 接口，在 GET context-messages 中用 side-effect 更新 active_thread_id | 最少请求                                       | GET 有写副作用，违反 REST 语义                |
 
 #### 推荐：方案 A（分离调用，前端并行）
 
@@ -301,6 +309,7 @@ class ContextMessagesResponse(BaseModel):
 1. **PATCH 是"持久化状态"，GET 是"获取数据"** — 这是两个独立关注点。PATCH 的作用更像是"记住用户上次在哪个线程"，以便下次打开会话时恢复位置。它不应该成为获取消息的必经之路。
 
 2. **前端并行调用无感知延迟** — 现代前端框架中，两个请求并行发出：
+
    ```typescript
    // 前端伪代码：两个请求同时发出，不等待 PATCH 结果也可以渲染消息
    const [_, messagesRes] = await Promise.all([
@@ -309,6 +318,7 @@ class ContextMessagesResponse(BaseModel):
    ]);
    renderMessages(messagesRes.messages);
    ```
+
    用户感知到的是**一次操作**，实际延迟取决于较慢的那个请求（通常是 context-messages），PATCH 本身极快。
 
 3. **context-messages 接口的复用性** — 它不仅在"切换线程"时使用，还在首次进入会话、滚动加载历史等场景独立使用。如果把它嵌入 PATCH 响应，这些场景还是要单独调。
@@ -327,7 +337,7 @@ class UpdateSessionRequest(BaseModel):
 
 ```python
 class UpdateSessionResponse(BaseModel):
-    session_id: int
+    chat_session_id: int
     title: str | None                     # 会话标题（可能被更新）
     active_thread_id: int                 # 当前活跃线程（已切换）
     active_thread: ThreadOut              # 目标线程基本信息
@@ -363,7 +373,7 @@ class BreadcrumbItem(BaseModel):
 
 ```python
 class ThreadTreeResponse(BaseModel):
-    session_id: int
+    chat_session_id: int
     active_thread_id: int                 # 当前活跃线程（高亮标识）
     threads: list[ThreadTreeNode]         # 扁平列表，前端用 parent_thread_id 自行构建树
 
@@ -390,15 +400,15 @@ class ThreadTreeNode(BaseModel):
 
 ## 3. 接口响应总览
 
-| 接口 | 方法 | 响应核心内容 |
-|---|---|---|
-| `/threads/fork` | POST | `ThreadOut` |
-| `/threads/{id}/merge/preview` | POST | `brief_content`（简报预览文本） |
-| `/threads/{id}/merge/confirm` | POST | 两个 `ThreadOut`（merged + target）+ `MessageOut`（brief） |
-| `/threads/{id}/context-messages` | GET | `list[MessageOut]` + 分页游标 |
-| `/sessions/{id}` | PATCH | session 元数据 + `ThreadOut`（active_thread） |
-| `/threads/{id}/breadcrumb` | GET | `list[BreadcrumbItem]` |
-| `/sessions/{id}/thread-tree` | GET | `list[ThreadTreeNode]` + `active_thread_id` |
+| 接口                             | 方法  | 响应核心内容                                               |
+| -------------------------------- | ----- | ---------------------------------------------------------- |
+| `/threads/fork`                  | POST  | `ThreadOut`                                                |
+| `/threads/{id}/merge/preview`    | POST  | `brief_content`（简报预览文本）                            |
+| `/threads/{id}/merge/confirm`    | POST  | 两个 `ThreadOut`（merged + target）+ `MessageOut`（brief） |
+| `/threads/{id}/context-messages` | GET   | `list[MessageOut]` + 分页游标                              |
+| `/sessions/{id}`                 | PATCH | session 元数据 + `ThreadOut`（active_thread）              |
+| `/threads/{id}/breadcrumb`       | GET   | `list[BreadcrumbItem]`                                     |
+| `/sessions/{id}/thread-tree`     | GET   | `list[ThreadTreeNode]` + `active_thread_id`                |
 
 ---
 
@@ -410,14 +420,15 @@ class ThreadTreeNode(BaseModel):
 
 MVP 阶段只需两种类型：
 
-| type 值 | 枚举名 | 说明 | 渲染方式 |
-|---|---|---|---|
-| 1 | `CHAT` | 普通聊天消息（user ↔ assistant） | 标准对话气泡 |
-| 2 | `BRIEF` | 学习简报（合并分支时生成） | 简报卡片（Markdown 渲染） |
+| type 值 | 枚举名  | 说明                             | 渲染方式                  |
+| ------- | ------- | -------------------------------- | ------------------------- |
+| 1       | `CHAT`  | 普通聊天消息（user ↔ assistant） | 标准对话气泡              |
+| 2       | `BRIEF` | 学习简报（合并分支时生成）       | 简报卡片（Markdown 渲染） |
 
 > 后续实现自动建议分支功能时，可新增 `BRANCH_SUGGESTION`(3) 类型。
 
 **BRIEF 消息的特征**：
+
 - `role = 3` (system)
 - `type = 2` (BRIEF)
 - `content` = 学习简报的纯文本内容（Markdown 格式）
@@ -475,17 +486,17 @@ ALTER TABLE messages ADD COLUMN type SMALLINT NOT NULL DEFAULT 1;
 
 ## 5. 设计决策记录
 
-| 编号 | 问题 | 决策 | 理由 |
-|---|---|---|---|
-| D1 | fork 是否自动切换 active_thread_id | **是，但响应不返回该字段** | fork 必然切换，前端从 `thread.id` 推断 |
-| D2 | BRANCH_SUGGESTION 是否纳入 MVP | **否，延后** | MVP 只支持用户手动 fork，枚举值预留位置但不实现 |
-| D3 | 合并后是否自动跳转 | **拆分为两步** | 用户需要先预览并编辑简报，确认后才执行合并并跳转 |
-| D4 | Brief 存储格式 | **纯文本（Markdown）存 `content`** | 不需要结构化 JSON，不需要 `metadata` 字段 |
-| D5 | 消息类型体系 | **MVP 只用 NORMAL + BRIEF** | `type` 字段区分，简单够用 |
-| D6 | 切换线程接口设计 | **方案 A：分离调用** | PATCH 切换 + GET 拉消息，前端并行发起，职责分离 |
-| D7 | 简报如何注入 LLM 上下文 | **`aupdate_state` 注入 checkpoint** | 利用 LangGraph 原生 API 向父线程 checkpoint 追加 SystemMessage，不触发 LLM 调用 |
-| D8 | 接口粒度：细粒度 vs 粗粒度 | **混合方案** | 有事务依赖的写操作（fork / merge 中的 active_thread_id 更新）合并到主接口内部；无依赖的读操作（context-messages）独立为复用接口 |
-| D9 | 哪些场景支持 Promise.all 并行 | **仅切换分支** | fork 和 merge 有数据依赖（需要先获取 new_thread_id / 需要事务一致性），只能串行；切换分支的 target_id 前端已知，可安全并行 |
+| 编号 | 问题                               | 决策                                | 理由                                                                                                                            |
+| ---- | ---------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| D1   | fork 是否自动切换 active_thread_id | **是，但响应不返回该字段**          | fork 必然切换，前端从 `thread.id` 推断                                                                                          |
+| D2   | BRANCH_SUGGESTION 是否纳入 MVP     | **否，延后**                        | MVP 只支持用户手动 fork，枚举值预留位置但不实现                                                                                 |
+| D3   | 合并后是否自动跳转                 | **拆分为两步**                      | 用户需要先预览并编辑简报，确认后才执行合并并跳转                                                                                |
+| D4   | Brief 存储格式                     | **纯文本（Markdown）存 `content`**  | 不需要结构化 JSON，不需要 `metadata` 字段                                                                                       |
+| D5   | 消息类型体系                       | **MVP 只用 NORMAL + BRIEF**         | `type` 字段区分，简单够用                                                                                                       |
+| D6   | 切换线程接口设计                   | **方案 A：分离调用**                | PATCH 切换 + GET 拉消息，前端并行发起，职责分离                                                                                 |
+| D7   | 简报如何注入 LLM 上下文            | **`aupdate_state` 注入 checkpoint** | 利用 LangGraph 原生 API 向父线程 checkpoint 追加 SystemMessage，不触发 LLM 调用                                                 |
+| D8   | 接口粒度：细粒度 vs 粗粒度         | **混合方案**                        | 有事务依赖的写操作（fork / merge 中的 active_thread_id 更新）合并到主接口内部；无依赖的读操作（context-messages）独立为复用接口 |
+| D9   | 哪些场景支持 Promise.all 并行      | **仅切换分支**                      | fork 和 merge 有数据依赖（需要先获取 new_thread_id / 需要事务一致性），只能串行；切换分支的 target_id 前端已知，可安全并行      |
 
 ---
 
