@@ -159,6 +159,13 @@ class ChatService:
                 user_id=user_id,
                 title=None,  # 可后续用 LLM 生成标题
             )
+            
+        # 检查thread状态是否合法
+        thread = await self.thread_repo.get(thread_id)
+        if thread is None or thread.status != 1:
+            raise BadRequestException(
+                message=f"Thread with id {thread_id} is not active or does not exist"
+            )
 
         # 2. Save human message
         human_message = Message(
