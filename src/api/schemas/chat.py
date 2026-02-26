@@ -18,9 +18,28 @@ class ChatResponse(BaseModel):
 
 class StreamEventType(StrEnum):
     HUMAN_MESSAGE_CREATED = "human_message_created"
+    SESSION_UPDATED = "session_updated"
     TOKEN = "token"
     AI_MESSAGE_CREATED = "ai_message_created"
     ERROR = "error"
+
+
+class StreamHumanMessageCreated(BaseModel):
+    chat_session_id: int
+    thread_id: int
+    message: MessageOut
+
+
+class StreamSessionUpdated(BaseModel):
+    chat_session_id: int
+    title: Optional[str] = None
+    reason: str = "title_updated"
+
+
+class StreamAIMessageCreated(BaseModel):
+    chat_session_id: int
+    thread_id: int
+    message: MessageOut
     
 class StreamToken(BaseModel):
     content: str

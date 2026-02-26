@@ -16,7 +16,13 @@ from src.domain.enums import MessageRole, MessageType
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.core.exceptions import ExternalServiceException, InternalServerException, BadRequestException
 from src.core.config.model_config import model_setting
-from src.api.schemas.chat import StreamEventType, StreamToken
+from src.api.schemas.chat import (
+    StreamEventType,
+    StreamToken,
+    StreamHumanMessageCreated,
+    StreamSessionUpdated,
+    StreamAIMessageCreated,
+)
 
 class ChatService:
     def __init__(self, db_session: AsyncSession):
@@ -197,7 +203,9 @@ class ChatService:
             )
 
         # 1. 如果是新会话，创建 session 和 thread
+        created_new_session = False
         if chat_session_id == -1:
+            created_new_session = True
             chat_session_id, thread_id = await self._create_new_session_and_thread(
                 user_id=user_id,
                 title=None,  # 可后续用 LLM 生成标题
@@ -221,17 +229,35 @@ class ChatService:
         )
         
         human_message = await self._save_message(human_message)
+        if human_message.id is None or human_message.created_at is None:
+            raise InternalServerException("Saved human message missing id or created_at")
+
         yield (
             StreamEventType.HUMAN_MESSAGE_CREATED,
-            MessageOut(
-                id=human_message.id,
-                role=MessageRole.USER,
-                type=MessageType.CHAT,
-                content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
+            StreamHumanMessageCreated(
+                chat_session_id=chat_session_id,
                 thread_id=thread_id,
-                created_at=human_message.created_at, #type: ignore
+                message=MessageOut(
+                    id=human_message.id,
+                    role=MessageRole.USER,
+                    type=MessageType.CHAT,
+                    content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
+                    thread_id=thread_id,
+                    created_at=human_message.created_at,
+                ),
             )
         )
+
+        if created_new_session:
+            current_session = await self.session_repo.get(chat_session_id)
+            yield (
+                StreamEventType.SESSION_UPDATED,
+                StreamSessionUpdated(
+                    chat_session_id=chat_session_id,
+                    title=current_session.title if current_session else None,
+                    reason="session_created",
+                ),
+            )
         
         model_config = await self.get_model_config(1)
         full_ai_content = ""
@@ -255,13 +281,17 @@ class ChatService:
             raise InternalServerException("Saved ai message missing id or created_at")
         yield (
             StreamEventType.AI_MESSAGE_CREATED,
-            MessageOut(
-                id=ai_message.id,
-                role=MessageRole.ASSISTANT,
-                type=MessageType.CHAT,
-                content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
+            StreamAIMessageCreated(
+                chat_session_id=chat_session_id,
                 thread_id=thread_id,
-                created_at=ai_message.created_at,
+                message=MessageOut(
+                    id=ai_message.id,
+                    role=MessageRole.ASSISTANT,
+                    type=MessageType.CHAT,
+                    content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
+                    thread_id=thread_id,
+                    created_at=ai_message.created_at,
+                ),
             )
         )
 
