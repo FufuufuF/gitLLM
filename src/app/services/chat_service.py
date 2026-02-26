@@ -1,8 +1,10 @@
-
+from typing import AsyncGenerator
 from langchain.messages import AIMessage, HumanMessage
 from langgraph.graph.state import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
+from src.api.schemas.messages import MessageOut
 from src.graph.state import GraphState
 from src.infra.db.repositories.messages import MessageRepository
 from src.infra.db.repositories.model_config import ModelConfigRepository
@@ -14,6 +16,7 @@ from src.domain.enums import MessageRole, MessageType
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.core.exceptions import ExternalServiceException, InternalServerException, BadRequestException
 from src.core.config.model_config import model_setting
+from src.api.schemas.chat import StreamEventType, StreamToken
 
 class ChatService:
     def __init__(self, db_session: AsyncSession):
@@ -82,7 +85,59 @@ class ChatService:
                 message=f"LLM service failed: {str(e)}",
                 code=5001
             )
+            
+    
+    async def _invoke_llm_stream(self, content: str, thread_id: int, model_config: ModelConfig) -> AsyncGenerator[str, None]:
+        """Invoke LLM with streaming output."""
+        # Prepare input and config
+        graph_input = GraphState(
+            messages=[
+                HumanMessage(content=content),
+            ]
+        )
+        run_config = RunnableConfig({
+            "configurable": {
+                "thread_id": str(thread_id),
+                "model_name": model_config.model_name,
+                "api_key": model_config.api_key,
+                "provider": model_config.provider,
+                "base_url": model_config.base_url,
+            }
+        })
 
+        try:
+            async with get_postgres_saver() as saver:
+                agent = create_chat_graph(postgres_saver=saver)
+
+                async for event in agent.astream_events(
+                    graph_input, 
+                    run_config, 
+                    version="v2",
+                    include_types=["chat_model"]
+                ):
+                    if event.get("event") != "on_chat_model_stream":
+                        continue
+
+                    chunk = event.get("data", {}).get("chunk")
+                    chunk_content = getattr(chunk, "content", None)
+                    if not chunk_content:
+                        continue
+
+                    if isinstance(chunk_content, str):
+                        yield chunk_content
+                    elif isinstance(chunk_content, list):
+                        for item in chunk_content:
+                            text = getattr(item, "text", None)
+                            if text:
+                                yield str(text)
+                    else:
+                        yield str(chunk_content)
+        
+        except Exception as e:
+            raise ExternalServiceException(
+                message=f"LLM service failed: {str(e)}",
+                code=5001
+            )
 
     async def _create_new_session_and_thread(
         self,
@@ -127,6 +182,88 @@ class ChatService:
 
         return chat_session_id, thread_id
 
+    
+    async def chat_stream(
+        self,
+        user_id: int,
+        chat_session_id: int,
+        thread_id: int,
+        content: str,
+    ) -> AsyncGenerator[tuple[StreamEventType, BaseModel], None]:
+        # 0. 校验请求参数一致性
+        if (chat_session_id == -1) != (thread_id == -1):
+            raise BadRequestException(
+                message="chat_session_id 和 thread_id 必须同时为 -1 或同时为有效值"
+            )
+
+        # 1. 如果是新会话，创建 session 和 thread
+        if chat_session_id == -1:
+            chat_session_id, thread_id = await self._create_new_session_and_thread(
+                user_id=user_id,
+                title=None,  # 可后续用 LLM 生成标题
+            )
+            
+        # 检查thread状态是否合法
+        thread = await self.thread_repo.get(thread_id)
+        if thread is None or thread.status != 1:
+            raise BadRequestException(
+                message=f"Thread with id {thread_id} is not active or does not exist"
+            )
+            
+        # 2. 用户消息先入库并返回元数据
+        human_message = Message(
+            role=MessageRole.USER,
+            content=content,
+            chat_session_id=chat_session_id,
+            thread_id=thread_id,
+            user_id=user_id,
+            type=MessageType.CHAT,
+        )
+        
+        human_message = await self._save_message(human_message)
+        yield (
+            StreamEventType.HUMAN_MESSAGE_CREATED,
+            MessageOut(
+                id=human_message.id,
+                role=MessageRole.USER,
+                type=MessageType.CHAT,
+                content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
+                thread_id=thread_id,
+                created_at=human_message.created_at, #type: ignore
+            )
+        )
+        
+        model_config = await self.get_model_config(1)
+        full_ai_content = ""
+        async for token in self._invoke_llm_stream(content, thread_id, model_config):
+            full_ai_content += token
+            yield (
+                StreamEventType.TOKEN,
+                StreamToken(content=token)
+            )
+            
+        ai_message = Message(
+            role=MessageRole.ASSISTANT,
+            content=full_ai_content,
+            chat_session_id=chat_session_id,
+            thread_id=thread_id,
+            user_id=user_id,
+            type=MessageType.CHAT,
+        )
+        ai_message = await self._save_message(ai_message)
+        if ai_message.id is None or ai_message.created_at is None:
+            raise InternalServerException("Saved ai message missing id or created_at")
+        yield (
+            StreamEventType.AI_MESSAGE_CREATED,
+            MessageOut(
+                id=ai_message.id,
+                role=MessageRole.ASSISTANT,
+                type=MessageType.CHAT,
+                content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
+                thread_id=thread_id,
+                created_at=ai_message.created_at,
+            )
+        )
 
     async def chat(
         self, 

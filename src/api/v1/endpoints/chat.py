@@ -1,16 +1,21 @@
+import logging
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas.chat import ChatRequest, ChatResponse
+from src.api.schemas.chat import ChatRequest, ChatResponse, StreamError, StreamEventType
 from src.api.schemas.messages import MessageOut
 from src.api.deps import get_current_user_id
 from src.api.schemas.base import BaseResponse
+from src.api.utils import format_sse
 from src.app.services.chat_service import ChatService
 from src.infra.db.session import get_db_session
 from src.core.exceptions import InternalServerException
 from src.domain.enums import MessageRole, MessageType
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/")
 async def chat(
@@ -58,5 +63,33 @@ async def chat(
         )
     )
 
-    
-    
+@router.post("/stream")
+async def chat_stream(
+    chat_request: ChatRequest, 
+    user_id: int = Depends(get_current_user_id), 
+    db_session: AsyncSession = Depends(get_db_session)
+    ) -> StreamingResponse:
+    async def event_generator():
+        service = ChatService(db_session)
+        try:
+            async for event_type, payload in service.chat_stream(
+                user_id, 
+                chat_request.chat_session_id, 
+                chat_request.thread_id, 
+                chat_request.content
+            ):
+                yield format_sse(event_type, payload.model_dump(mode="json"))
+        except Exception as e:
+            logger.exception("chat stream failed")
+            error = StreamError(code=500, message="stream failed")
+            yield format_sse(StreamEventType.ERROR, error.model_dump())
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # For Nginx to disable response buffering
+        }
+    )
