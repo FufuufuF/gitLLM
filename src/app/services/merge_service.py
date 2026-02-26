@@ -196,9 +196,6 @@ class MergeService:
     async def _generate_brief(self, messages: list[Message]) -> str:
         """调用 LLM 生成学习简报"""
 
-        # MOCK
-        return "这是一个占位的preview-content"
-
         system_prompt = _load_brief_prompt()
 
         # 拼接对话历史
