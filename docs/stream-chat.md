@@ -50,25 +50,30 @@ data: <json_payload>
 
 #### 事件顺序（本方案核心）
 
-1. 接收用户消息后，先将用户消息入库并返回用户消息元数据
-2. 调用 LLM API，流式返回 token（仅在内存累积，不入库）
-3. LLM 回复完成后，再将 AI 完整消息入库并返回 AI 消息元数据
-4. 上述三步完成，本次接口调用结束
+1. 接收用户消息后，先将用户消息入库并返回用户消息元数据（含 `chat_session_id`）
+2. 发送 `session_updated`（如果会话信息有新增/变更，如新会话创建、标题更新）
+3. 调用 LLM API，流式返回 token（仅在内存累积，不入库）
+4. LLM 回复完成后，再将 AI 完整消息入库并返回 AI 消息元数据
+5. 上述步骤完成，本次接口调用结束
 
 #### 事件类型定义
 
 | 事件类型 | 触发时机 | Payload 结构 |
 | --- | --- | --- |
-| `human_message_created` | 用户消息写入 DB 后 | `MessageOut` |
+| `human_message_created` | 用户消息写入 DB 后 | `{"chat_session_id": int, "thread_id": int, "message": MessageOut}` |
+| `session_updated` | 会话创建或会话标题更新后 | `{"chat_session_id": int, "title": str \| null, "reason": str}` |
 | `token` | 每个 token 生成时 | `{"content": str}` |
-| `ai_message_created` | AI 完整消息写入 DB 后 | `MessageOut` |
+| `ai_message_created` | AI 完整消息写入 DB 后 | `{"chat_session_id": int, "thread_id": int, "message": MessageOut}` |
 | `error` | 任意步骤异常 | `{"code": int, "message": str}` |
 
 #### 示例流
 
 ```
 event: human_message_created
-data: {"id": 123, "role": 1, "type": 1, "content": "帮我总结这个PR", "thread_id": 5, "created_at": "2026-02-26T10:00:00Z"}
+data: {"chat_session_id": 10, "thread_id": 5, "message": {"id": 123, "role": 1, "type": 1, "content": "帮我总结这个PR", "thread_id": 5, "created_at": "2026-02-26T10:00:00Z"}}
+
+event: session_updated
+data: {"chat_session_id": 10, "title": "代码评审讨论", "reason": "session_created"}
 
 event: token
 data: {"content": "好的"}
@@ -80,7 +85,7 @@ event: token
 data: {"content": "总结一下"}
 
 event: ai_message_created
-data: {"id": 124, "role": 2, "type": 1, "content": "好的，我来总结一下", "thread_id": 5, "created_at": "2026-02-26T10:00:02Z"}
+data: {"chat_session_id": 10, "thread_id": 5, "message": {"id": 124, "role": 2, "type": 1, "content": "好的，我来总结一下", "thread_id": 5, "created_at": "2026-02-26T10:00:02Z"}}
 ```
 
 ---
@@ -163,7 +168,11 @@ sequenceDiagram
     S-->>A: yield human_message_created
     A-->>F: SSE: human_message_created
 
-    Note over S,G: 2) 流式调用 LLM，token 仅保存在内存
+    Note over S: 2) 会话事件（可选）
+    S-->>A: yield session_updated
+    A-->>F: SSE: session_updated
+
+    Note over S,G: 3) 流式调用 LLM，token 仅保存在内存
     S->>G: astream_events(input, config)
 
     loop 每个 token
@@ -172,7 +181,7 @@ sequenceDiagram
         A-->>F: SSE: token
     end
 
-    Note over S: 3) 流结束后一次性入库 AI 消息
+    Note over S: 4) 流结束后一次性入库 AI 消息
     S->>DB: INSERT ai_message(full_content)
     DB-->>S: ai_message
     S-->>A: yield ai_message_created
@@ -193,9 +202,28 @@ from enum import Enum
 
 class StreamEventType(str, Enum):
     HUMAN_MESSAGE_CREATED = "human_message_created"
+    SESSION_UPDATED = "session_updated"
     TOKEN = "token"
     AI_MESSAGE_CREATED = "ai_message_created"
     ERROR = "error"
+
+
+class StreamHumanMessageCreated(BaseModel):
+    chat_session_id: int
+    thread_id: int
+    message: MessageOut
+
+
+class StreamSessionUpdated(BaseModel):
+    chat_session_id: int
+    title: str | None = None
+    reason: str = "title_updated"
+
+
+class StreamAIMessageCreated(BaseModel):
+    chat_session_id: int
+    thread_id: int
+    message: MessageOut
 
 
 class StreamToken(BaseModel):
@@ -207,7 +235,7 @@ class StreamError(BaseModel):
     message: str
 ```
 
-> 用户消息和 AI 消息元数据统一复用 `MessageOut`，无需额外 `Start/End` 包装结构。
+> `human_message_created` 与 `ai_message_created` 使用包装结构，兼顾消息元数据与会话上下文（`chat_session_id`）。
 
 ### 4.2 API 层
 
@@ -333,9 +361,10 @@ class ChatService:
 
 ### 5.1 事件处理建议
 
-- `human_message_created`：用服务端真实 `id` 替换本地临时用户消息
+- `human_message_created`：从 `data.chat_session_id` 保存会话 ID，并用 `data.message.id` 替换本地临时用户消息
+- `session_updated`：更新会话标题/会话信息（例如新建会话后标题回填）
 - `token`：将 token 追加到当前“正在生成”的 AI 气泡（仅前端状态）
-- `ai_message_created`：用最终消息对象替换临时 AI 气泡并结束 loading
+- `ai_message_created`：用 `data.message` 替换临时 AI 气泡并结束 loading
 - `error`：展示错误并结束 loading
 
 ### 5.2 fetch + ReadableStream（推荐）
@@ -343,13 +372,28 @@ class ChatService:
 ```typescript
 switch (eventType) {
   case 'human_message_created':
-    onHumanMessageCreated(data as MessageOut);
+        onHumanMessageCreated(data as {
+            chat_session_id: number;
+            thread_id: number;
+            message: MessageOut;
+        });
+        break;
+    case 'session_updated':
+        onSessionUpdated(data as {
+            chat_session_id: number;
+            title: string | null;
+            reason: string;
+        });
     break;
   case 'token':
     onToken(data as { content: string });
     break;
   case 'ai_message_created':
-    onAiMessageCreated(data as MessageOut);
+        onAiMessageCreated(data as {
+            chat_session_id: number;
+            thread_id: number;
+            message: MessageOut;
+        });
     break;
   case 'error':
     onError(data);
@@ -363,9 +407,9 @@ switch (eventType) {
 
 | 文件路径 | 修改内容 |
 | --- | --- |
-| `src/api/schemas/chat.py` | 新增 `StreamEventType`（human/token/ai/error）与流式 payload |
+| `src/api/schemas/chat.py` | 新增 `StreamEventType`（human/session/token/ai/error）与流式 payload |
 | `src/api/v1/endpoints/chat.py` | 新增 `/stream` 端点与 SSE 输出格式 |
-| `src/app/services/chat_service.py` | 按“三阶段”实现：用户先入库 → token 流式输出 → AI 完成后入库 |
+| `src/app/services/chat_service.py` | 按“四阶段”实现：用户入库 → session_updated → token 流式输出 → AI 完成后入库 |
 
 ---
 
@@ -374,7 +418,7 @@ switch (eventType) {
 ### 7.1 单元测试
 
 - `chat_stream` 校验 thread 状态逻辑
-- 事件顺序断言：`human_message_created -> token* -> ai_message_created`
+- 事件顺序断言：`human_message_created -> session_updated?(可选) -> token* -> ai_message_created`
 - 异常场景断言：token 阶段异常时不会写入 AI 消息
 
 ### 7.2 集成测试
