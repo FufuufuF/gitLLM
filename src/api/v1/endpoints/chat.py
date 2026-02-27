@@ -1,4 +1,5 @@
 import logging
+import asyncio
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -79,6 +80,9 @@ async def chat_stream(
                 chat_request.content
             ):
                 yield format_sse(event_type, payload.model_dump(mode="json"))
+        except asyncio.CancelledError:
+            logger.info("Chat stream cancelled by client")
+            raise
         except Exception as e:
             logger.exception("chat stream failed")
             error = StreamError(code=500, message="stream failed")
