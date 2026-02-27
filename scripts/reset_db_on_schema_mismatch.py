@@ -17,8 +17,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infra.db.engine import engine
 from src.infra.db.models import Base, User  # Import Base to register all models
 from src.infra.db.session import SessionLocal
+from src.core.config.checkpoint_config import checkpoint_setting
 
 logger = logging.getLogger(__name__)
+
+# LangGraph AsyncPostgresSaver 自动创建的表
+_CHECKPOINT_TABLES = [
+    "checkpoint_writes",
+    "checkpoint_blobs",
+    "checkpoints",
+    "checkpoint_migrations",
+]
 
 
 def _normalize_type_name(type_obj: object) -> str:
@@ -92,6 +101,9 @@ async def reset_db_if_schema_mismatch() -> bool:
         await _insert_test_user(session)
         await session.commit()
 
+    # 同步清空 PostgreSQL checkpoint 数据，避免旧 thread_id 匹配到新数据
+    await _clear_postgres_checkpoints()
+
     logger.info("Database reset completed.")
     return True
 
@@ -106,6 +118,29 @@ async def _insert_test_user(session: AsyncSession) -> None:
             status=1,
         )
     )
+
+
+async def _clear_postgres_checkpoints() -> None:
+    """清空 PostgreSQL 中 LangGraph checkpoint 相关的所有表。"""
+    import psycopg
+
+    checkpoint_url = checkpoint_setting.CHECKPOINT_DATABASE_URL.strip()
+    # 还原为标准 postgres url（去掉 SQLAlchemy driver 标识）
+    clean_url = checkpoint_url.replace("+asyncpg", "")
+
+    try:
+        # 使用同步连接避免 Windows ProactorEventLoop 兼容性问题
+        with psycopg.Connection.connect(clean_url) as conn:
+            for table in _CHECKPOINT_TABLES:
+                conn.execute(
+                    psycopg.sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(
+                        psycopg.sql.Identifier(table)
+                    )
+                )
+            conn.commit()
+        logger.info("PostgreSQL checkpoint tables dropped.")
+    except Exception:
+        logger.exception("Failed to clear PostgreSQL checkpoint tables")
 
 
 def main() -> None:
