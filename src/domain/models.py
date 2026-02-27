@@ -3,13 +3,14 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
-from src.domain.enums import MessageType, MessageRole, ThreadType, ThreadStatus
+from src.domain.enums import MessageType, MessageRole, ThreadType, ThreadStatus, MessageStatus
 
 class Message(BaseModel):
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
     id: Optional[int] = None
     role: MessageRole
+    status: MessageStatus = MessageStatus.NORMAL
     content: str | list[str | dict]
     chat_session_id: int
     thread_id: int

@@ -178,17 +178,17 @@ async def event_generator():
 ### 正常流程
 
 ```
-human_message_created → [session_updated] → token* → ai_message_created
+human_message_created → [chat_session_updated] → token* → ai_message_created
 ```
 
 ### 用户取消
 
 ```
-human_message_created → [session_updated] → token* → (连接断开，部分消息静默入库)
+human_message_created → [chat_session_updated] → token* → (连接断开，部分消息静默入库)
 ```
 
 ### LLM 错误
 
 ```
-human_message_created → [session_updated] → token* → error (部分消息静默入库)
+human_message_created → [chat_session_updated] → token* → error (部分消息静默入库)
 ```

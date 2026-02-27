@@ -1,10 +1,14 @@
 from enum import IntEnum
 
-
 class MessageRole(IntEnum):
     USER = 1
     ASSISTANT = 2
     SYSTEM = 3
+    
+class MessageStatus(IntEnum):
+    NORMAL = 1
+    ERROR = 2
+    STOP_GENERATION = 3
     
 class MessageType(IntEnum):
     CHAT = 1

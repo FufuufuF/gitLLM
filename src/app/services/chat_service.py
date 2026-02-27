@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from typing import AsyncGenerator
 from langchain.messages import AIMessage, HumanMessage
 from langgraph.graph.state import RunnableConfig
@@ -12,7 +14,7 @@ from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.infra.db.repositories.threads import ThreadRepository
 from src.infra.checkpoint.postgres import get_postgres_saver
 from src.domain.models import Message, ModelConfig, ChatSession, Thread
-from src.domain.enums import MessageRole, MessageType
+from src.domain.enums import MessageRole, MessageStatus, MessageType
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.core.exceptions import ExternalServiceException, InternalServerException, BadRequestException
 from src.core.config.model_config import model_setting
@@ -20,9 +22,11 @@ from src.api.schemas.chat import (
     StreamEventType,
     StreamToken,
     StreamHumanMessageCreated,
-    StreamSessionUpdated,
+    StreamChatSessionUpdated,
     StreamAIMessageCreated,
 )
+
+logger = logging.getLogger(__name__)
 
 class ChatService:
     def __init__(self, db_session: AsyncSession):
@@ -251,23 +255,61 @@ class ChatService:
         if created_new_session:
             current_session = await self.session_repo.get(chat_session_id)
             yield (
-                StreamEventType.SESSION_UPDATED,
-                StreamSessionUpdated(
+                StreamEventType.CHAT_SESSION_UPDATED,
+                StreamChatSessionUpdated(
                     chat_session_id=chat_session_id,
                     title=current_session.title if current_session else None,
-                    reason="session_created",
+                    reason="chat_session_created",
                 ),
             )
         
         model_config = await self.get_model_config(1)
         full_ai_content = ""
-        async for token in self._invoke_llm_stream(content, thread_id, model_config):
-            full_ai_content += token
-            yield (
-                StreamEventType.TOKEN,
-                StreamToken(content=token)
-            )
-            
+
+        try:
+            async for token in self._invoke_llm_stream(content, thread_id, model_config):
+                full_ai_content += token
+                yield (
+                    StreamEventType.TOKEN,
+                    StreamToken(content=token)
+                )
+        except asyncio.CancelledError:
+            # 用户主动取消：保存部分内容，标记 STOP_GENERATION
+            logger.info("LLM stream cancelled by client, saving partial content")
+            if full_ai_content:
+                partial_msg = Message(
+                    role=MessageRole.ASSISTANT,
+                    content=full_ai_content,
+                    status=MessageStatus.STOP_GENERATION,
+                    chat_session_id=chat_session_id,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    type=MessageType.CHAT,
+                )
+                try:
+                    await self._save_message(partial_msg)
+                except Exception:
+                    logger.warning("Failed to save partial message on cancellation")
+            raise  # 必须重新抛出，让框架正确关闭连接
+        except Exception:
+            # LLM/系统错误：保存部分内容，标记 ERROR
+            if full_ai_content:
+                error_msg = Message(
+                    role=MessageRole.ASSISTANT,
+                    content=full_ai_content,
+                    status=MessageStatus.ERROR,
+                    chat_session_id=chat_session_id,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    type=MessageType.CHAT,
+                )
+                try:
+                    await self._save_message(error_msg)
+                except Exception:
+                    logger.warning("Failed to save partial message on LLM error")
+            raise  # 向上抛出，由 endpoint 层 except Exception 捕获并发送 StreamError
+
+        # 正常完成：保存完整 AI 消息
         ai_message = Message(
             role=MessageRole.ASSISTANT,
             content=full_ai_content,
