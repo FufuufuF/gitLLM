@@ -13,6 +13,7 @@ from src.infra.db.repositories.model_config import ModelConfigRepository
 from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.infra.db.repositories.threads import ThreadRepository
 from src.infra.checkpoint.postgres import get_postgres_saver
+from src.infra.db.session import SessionFactory
 from src.domain.models import Message, ModelConfig, ChatSession, Thread
 from src.domain.enums import MessageRole, MessageStatus, MessageType
 from src.graph.graphs.chat_graph import create_chat_graph
@@ -29,8 +30,13 @@ from src.api.schemas.chat import (
 logger = logging.getLogger(__name__)
 
 class ChatService:
-    def __init__(self, db_session: AsyncSession):
+    def __init__(
+        self,
+        db_session: AsyncSession,
+        session_factory: SessionFactory | None = None,
+    ):
         self.db_session = db_session
+        self.session_factory = session_factory
         self.message_repo = MessageRepository(db_session)
         self.model_config_repo = ModelConfigRepository(db_session)
         self.session_repo = ChatSessionRepository(db_session)
@@ -61,6 +67,33 @@ class ChatService:
             raise InternalServerException("Failed to save message to database")
         return saved
 
+
+    async def _commit_session(self) -> None:
+        """Commit current transaction; rollback on failure to keep session clean."""
+        try:
+            await self.db_session.commit()
+        except BaseException:
+            await self.db_session.rollback()
+            raise
+
+    async def _save_and_commit(self, message: Message) -> Message:
+        """Save message and commit in one operation (suitable for asyncio.shield)."""
+        saved = await self._save_message(message)
+        await self._commit_session()
+        return saved
+
+    async def _save_message_detached(self, message: Message) -> None:
+        """使用独立 session 保存消息，不受请求级 session 生命周期影响。
+
+        用于取消/错误场景，此时请求级 session 可能已被破坏。
+        """
+        if self.session_factory is None:
+            logger.warning("session_factory not provided, cannot save detached message")
+            return
+        async with self.session_factory() as session:
+            repo = MessageRepository(session)
+            await repo.add(message)
+            await session.commit()
 
     async def _invoke_llm(self, content: str, thread_id: int, model_config: ModelConfig) -> str:
         """Invoke LLM."""
@@ -235,6 +268,7 @@ class ChatService:
         human_message = await self._save_message(human_message)
         if human_message.id is None or human_message.created_at is None:
             raise InternalServerException("Saved human message missing id or created_at")
+        await self._commit_session()
 
         yield (
             StreamEventType.HUMAN_MESSAGE_CREATED,
@@ -248,6 +282,7 @@ class ChatService:
                     content=human_message.content if isinstance(human_message.content, str) else str(human_message.content),
                     thread_id=thread_id,
                     created_at=human_message.created_at,
+                    status=human_message.status,
                 ),
             )
         )
@@ -274,7 +309,7 @@ class ChatService:
                     StreamToken(content=token)
                 )
         except asyncio.CancelledError:
-            # 用户主动取消：保存部分内容，标记 STOP_GENERATION
+            # 用户主动取消：用独立 session 保存部分内容，标记 STOP_GENERATION
             logger.info("LLM stream cancelled by client, saving partial content")
             if full_ai_content:
                 partial_msg = Message(
@@ -286,13 +321,11 @@ class ChatService:
                     user_id=user_id,
                     type=MessageType.CHAT,
                 )
-                try:
-                    await self._save_message(partial_msg)
-                except Exception:
-                    logger.warning("Failed to save partial message on cancellation")
-            raise  # 必须重新抛出，让框架正确关闭连接
+                asyncio.create_task(
+                    self._save_message_detached(partial_msg)
+                )
         except Exception:
-            # LLM/系统错误：保存部分内容，标记 ERROR
+            # LLM/系统错误：用独立 session 保存部分内容，标记 ERROR
             if full_ai_content:
                 error_msg = Message(
                     role=MessageRole.ASSISTANT,
@@ -304,8 +337,10 @@ class ChatService:
                     type=MessageType.CHAT,
                 )
                 try:
-                    await self._save_message(error_msg)
-                except Exception:
+                    await asyncio.shield(
+                        self._save_message_detached(error_msg)
+                    )
+                except BaseException:
                     logger.warning("Failed to save partial message on LLM error")
             raise  # 向上抛出，由 endpoint 层 except Exception 捕获并发送 StreamError
 
@@ -321,6 +356,7 @@ class ChatService:
         ai_message = await self._save_message(ai_message)
         if ai_message.id is None or ai_message.created_at is None:
             raise InternalServerException("Saved ai message missing id or created_at")
+        await self._commit_session()
         yield (
             StreamEventType.AI_MESSAGE_CREATED,
             StreamAIMessageCreated(
@@ -333,6 +369,7 @@ class ChatService:
                     content=ai_message.content if isinstance(ai_message.content, str) else str(ai_message.content),
                     thread_id=thread_id,
                     created_at=ai_message.created_at,
+                    status=ai_message.status,
                 ),
             )
         )

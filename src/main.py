@@ -14,6 +14,21 @@ from src.infra.db.models import Base  # 导入 Base 会触发所有模型的注�
 logger = logging.getLogger(__name__)
 
 
+class _PoolTerminateFilter(logging.Filter):
+    """过滤 SQLAlchemy 连接池在 Task 取消时产生的无害终止日志。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.exc_info and record.exc_info[1] is not None:
+            import asyncio
+            if isinstance(record.exc_info[1], asyncio.CancelledError):
+                return False
+        return True
+
+
+# 仅针对连接池 logger 添加过滤器，不影响其他 SQLAlchemy 日志
+logging.getLogger("sqlalchemy.pool").addFilter(_PoolTerminateFilter())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理：启动时自动创建数据库表"""

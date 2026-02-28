@@ -11,7 +11,7 @@ from src.api.deps import get_current_user_id
 from src.api.schemas.base import BaseResponse
 from src.api.utils import format_sse
 from src.app.services.chat_service import ChatService
-from src.infra.db.session import get_db_session
+from src.infra.db.session import get_db_session, get_session_factory, SessionFactory
 from src.core.exceptions import InternalServerException
 from src.domain.enums import MessageRole, MessageType
 
@@ -51,7 +51,8 @@ async def chat(
                 thread_id=thread_id,
                 temp_id=chat_request.temp_id,
                 role=MessageRole.USER,
-                type=MessageType.CHAT
+                type=MessageType.CHAT,
+                status=human_message.status
             ),
             ai_message=MessageOut(
                 id=ai_message.id,
@@ -59,7 +60,8 @@ async def chat(
                 created_at=ai_message.created_at,
                 thread_id=thread_id,
                 role=MessageRole.ASSISTANT,
-                type=MessageType.CHAT
+                type=MessageType.CHAT,
+                status=ai_message.status
             )
         )
     )
@@ -68,10 +70,11 @@ async def chat(
 async def chat_stream(
     chat_request: ChatRequest, 
     user_id: int = Depends(get_current_user_id), 
-    db_session: AsyncSession = Depends(get_db_session)
+    db_session: AsyncSession = Depends(get_db_session),
+    session_factory: SessionFactory = Depends(get_session_factory),
     ) -> StreamingResponse:
     async def event_generator():
-        service = ChatService(db_session)
+        service = ChatService(db_session, session_factory)
         try:
             async for event_type, payload in service.chat_stream(
                 user_id, 
@@ -82,7 +85,7 @@ async def chat_stream(
                 yield format_sse(event_type, payload.model_dump(mode="json"))
         except asyncio.CancelledError:
             logger.info("Chat stream cancelled by client")
-            raise
+            return  # 静默结束生成器，不再 re-raise 避免框架层打印异常堆栈
         except Exception as e:
             logger.exception("chat stream failed")
             error = StreamError(code=500, message="stream failed")
