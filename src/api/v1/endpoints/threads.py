@@ -170,6 +170,7 @@ async def get_context_messages(
                     content=m.content if isinstance(m.content, str) else str(m.content),
                     thread_id=m.thread_id,
                     created_at=m.created_at,  # type: ignore
+                    status=m.status,
                 )
                 for m in messages
             ],

@@ -2,7 +2,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
-from src.domain.enums import MessageRole, MessageType
+from src.domain.enums import MessageRole, MessageType, MessageStatus
 
 class MessageOut(BaseModel):
     """消息通用输出模型"""
@@ -11,6 +11,7 @@ class MessageOut(BaseModel):
     id: Optional[int] = None
     role: MessageRole
     type: MessageType
+    status: MessageStatus
     content: str
     thread_id: int
     created_at: datetime
