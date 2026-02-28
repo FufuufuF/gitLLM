@@ -130,6 +130,7 @@ async def merge_confirm(
                 id=brief_message.id,  # type: ignore
                 role=brief_message.role,  # type: ignore[arg-type]
                 type=brief_message.type,  # type: ignore[arg-type]
+                status=brief_message.status,  # type: ignore[arg-type]
                 content=brief_message.content if isinstance(brief_message.content, str) else str(brief_message.content),
                 thread_id=brief_message.thread_id,
                 created_at=brief_message.created_at,  # type: ignore
