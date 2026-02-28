@@ -17,6 +17,7 @@ from src.infra.db.session import SessionFactory
 from src.domain.models import Message, ModelConfig, ChatSession, Thread
 from src.domain.enums import MessageRole, MessageStatus, MessageType
 from src.graph.graphs.chat_graph import create_chat_graph
+from src.app.services.session_title_service import SessionTitleService
 from src.core.exceptions import ExternalServiceException, InternalServerException, BadRequestException
 from src.core.config.model_config import model_setting
 from src.api.schemas.chat import (
@@ -41,7 +42,6 @@ class ChatService:
         self.model_config_repo = ModelConfigRepository(db_session)
         self.session_repo = ChatSessionRepository(db_session)
         self.thread_repo = ThreadRepository(db_session)
-
 
     async def get_model_config(self, model_config_id: int) -> ModelConfig:
         # MOCK
@@ -225,6 +225,19 @@ class ChatService:
 
         return chat_session_id, thread_id
 
+    async def _generate_new_session_title(self, first_user_message: str) -> str | None:
+        """为新会话生成标题（失败时返回兜底标题）。"""
+        session_title_service = SessionTitleService()
+        try:
+            model_config = await self.get_model_config(1)
+            return await session_title_service.generate_title(
+                first_user_message=first_user_message,
+                model_config=model_config,
+            )
+        except Exception as e:
+            logger.warning("Failed to generate title for new session: %s", e)
+            return None
+
     
     async def chat_stream(
         self,
@@ -243,9 +256,10 @@ class ChatService:
         created_new_session = False
         if chat_session_id == -1:
             created_new_session = True
+            generated_title = await self._generate_new_session_title(content)
             chat_session_id, thread_id = await self._create_new_session_and_thread(
                 user_id=user_id,
-                title=None,  # 可后续用 LLM 生成标题
+                title=generated_title,
             )
             
         # 检查thread状态是否合法
@@ -401,9 +415,10 @@ class ChatService:
 
         # 1. 如果是新会话，创建 session 和 thread
         if chat_session_id == -1:
+            generated_title = await self._generate_new_session_title(content)
             chat_session_id, thread_id = await self._create_new_session_and_thread(
                 user_id=user_id,
-                title=None,  # 可后续用 LLM 生成标题
+                title=generated_title,
             )
             
         # 检查thread状态是否合法

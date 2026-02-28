@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from pathlib import Path
-
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,17 +14,11 @@ from src.infra.db.repositories.threads import ThreadRepository
 from src.infra.checkpoint.postgres import get_postgres_saver
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.llm.factory import get_model
-
-
-# 简报生成 prompt
-_BRIEF_PROMPT_PATH = Path(__file__).resolve().parents[2] / "llm" / "prompts" / "brief.md"
+from src.llm.prompt_loader import load_prompt
 
 
 def _load_brief_prompt() -> str:
-    try:
-        return _BRIEF_PROMPT_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise FileNotFoundError("Brief prompt not found")
+    return load_prompt("brief.md")
 
 
 class MergeService:
