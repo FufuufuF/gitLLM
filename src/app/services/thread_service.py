@@ -8,6 +8,7 @@ from src.infra.db.repositories.chat_sessions import ChatSessionRepository
 from src.infra.db.repositories.branch_ops import BranchOpRepository
 from src.infra.db.repositories.messages import MessageRepository
 from src.infra.db.repositories.threads import ThreadRepository
+from src.llm.prompt_loader import load_prompt
 
 
 class ThreadService:
@@ -58,6 +59,10 @@ class ThreadService:
 
         await self.checkpoint_service.flush_checkpoint(parent_thread_id)
         parent_state = await self.checkpoint_service.get_latest_state(parent_thread_id)
+        if title is not None:
+            fork_prompt = load_prompt("fork_prompt.md") + "\n\n" + title if title else ""
+            if parent_state is not None:
+                parent_state["messages"].append({"role": "system", "content": fork_prompt})
 
         new_thread = await self.thread_repo.create_fork_thread(
             user_id=user_id,
