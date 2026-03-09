@@ -31,6 +31,9 @@ from src.api.schemas.chat import (
 logger = logging.getLogger(__name__)
 
 class ChatService:
+    # 持有后台任务的强引用，防止 GC 在任务完成前将其回收
+    _background_tasks: set[asyncio.Task] = set()
+
     def __init__(
         self,
         db_session: AsyncSession,
@@ -42,6 +45,13 @@ class ChatService:
         self.model_config_repo = ModelConfigRepository(db_session)
         self.session_repo = ChatSessionRepository(db_session)
         self.thread_repo = ThreadRepository(db_session)
+
+    @classmethod
+    def _fire_and_forget(cls, coro) -> None:
+        """创建后台任务并持有强引用，任务完成后自动从 set 中移除。"""
+        task = asyncio.create_task(coro)
+        cls._background_tasks.add(task)
+        task.add_done_callback(cls._background_tasks.discard)
 
     async def get_model_config(self, model_config_id: int) -> ModelConfig:
         # MOCK
@@ -335,9 +345,7 @@ class ChatService:
                     user_id=user_id,
                     type=MessageType.CHAT,
                 )
-                asyncio.create_task(
-                    self._save_message_detached(partial_msg)
-                )
+                self._fire_and_forget(self._save_message_detached(partial_msg))
         except Exception:
             # LLM/系统错误：用独立 session 保存部分内容，标记 ERROR
             if full_ai_content:
@@ -350,12 +358,7 @@ class ChatService:
                     user_id=user_id,
                     type=MessageType.CHAT,
                 )
-                try:
-                    await asyncio.shield(
-                        self._save_message_detached(error_msg)
-                    )
-                except BaseException:
-                    logger.warning("Failed to save partial message on LLM error")
+                self._fire_and_forget(self._save_message_detached(error_msg))
             raise  # 向上抛出，由 endpoint 层 except Exception 捕获并发送 StreamError
 
         # 正常完成：保存完整 AI 消息
