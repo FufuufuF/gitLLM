@@ -28,11 +28,11 @@ if __name__ == "__main__":
             "base_url": model_setting.QWEN_MODEL_BASE_URL,
         }
     }
-    initial_state = GraphState(
-        messages=[
+    initial_state = {
+        "messages": [
             HumanMessage(content="介绍一下你自己"),
-        ]
-    )
+        ],
+    }
 
     async def run():
         res = await graph.ainvoke(initial_state, RunnableConfig(config)) # type: ignore

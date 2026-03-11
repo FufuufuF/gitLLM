@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from src.api.schemas.messages import MessageOut
-from src.graph.state import GraphState
 from src.infra.db.repositories.messages import MessageRepository
 from src.infra.db.repositories.model_config import ModelConfigRepository
 from src.infra.db.repositories.chat_sessions import ChatSessionRepository
@@ -109,11 +108,9 @@ class ChatService:
         """Invoke LLM."""
         
         # Prepare input and config
-        graph_input = GraphState(
-            messages=[
-                HumanMessage(content=content),
-            ]
-        )
+        graph_input = {
+            "messages": [HumanMessage(content=content)],
+        }
         run_config = RunnableConfig({
             "configurable": {
                 "thread_id": str(thread_id),
@@ -143,11 +140,9 @@ class ChatService:
     async def _invoke_llm_stream(self, content: str, thread_id: int, model_config: ModelConfig) -> AsyncGenerator[str, None]:
         """Invoke LLM with streaming output."""
         # Prepare input and config
-        graph_input = GraphState(
-            messages=[
-                HumanMessage(content=content),
-            ]
-        )
+        graph_input = {
+            "messages": [HumanMessage(content=content)],
+        }
         run_config = RunnableConfig({
             "configurable": {
                 "thread_id": str(thread_id),
