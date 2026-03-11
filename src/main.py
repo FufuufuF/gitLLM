@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -42,10 +43,9 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="gitLLM", version="0.1.0", lifespan=lifespan)
 
-    # Configure CORS
-    origins = [
-        "http://localhost:5173",
-    ]
+    # Configure CORS — read from CORS_ORIGINS env var (comma-separated)
+    cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+    origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
 
     app.add_middleware(
         CORSMiddleware,
