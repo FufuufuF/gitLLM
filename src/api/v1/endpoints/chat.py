@@ -12,7 +12,7 @@ from src.api.schemas.base import BaseResponse
 from src.api.utils import format_sse
 from src.app.services.chat_service import ChatService
 from src.infra.db.session import get_db_session, get_session_factory, SessionFactory
-from src.core.exceptions import InternalServerException
+from src.core.exceptions import InternalServerException, AppException, ExternalServiceException
 from src.domain.enums import MessageRole, MessageType
 
 router = APIRouter()
@@ -87,8 +87,16 @@ async def chat_stream(
             logger.info("Chat stream cancelled by client")
             return  # 静默结束生成器，不再 re-raise 避免框架层打印异常堆栈
         except Exception as e:
-            logger.exception("chat stream failed")
-            error = StreamError(code=500, message="stream failed")
+            if isinstance(e, ExternalServiceException):
+                error_type = (e.details or {}).get("error_type", "llm_error")
+                logger.warning("chat stream failed: external service error [%s]", error_type)
+                error = StreamError(code=e.code, message=e.message, error_type=error_type)
+            elif isinstance(e, AppException):
+                logger.warning("chat stream failed: app error [%s]", e.code)
+                error = StreamError(code=e.code, message=e.message, error_type="app_error")
+            else:
+                logger.exception("chat stream failed: unexpected error")
+                error = StreamError(code=500, message="服务器内部错误，请稍后再试", error_type="internal_error")
             yield format_sse(StreamEventType.ERROR, error.model_dump())
 
     return StreamingResponse(

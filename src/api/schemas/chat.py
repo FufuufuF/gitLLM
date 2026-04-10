@@ -47,3 +47,4 @@ class StreamToken(BaseModel):
 class StreamError(BaseModel):
     code: int
     message: str
+    error_type: str = "internal_error"  # quota_exceeded, rate_limited, auth_error, llm_error, internal_error
