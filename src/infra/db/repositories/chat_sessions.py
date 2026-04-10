@@ -120,3 +120,13 @@ class ChatSessionRepository(BaseRepository[ChatSessionModel, ChatSession]):
 
         # 重新查询返回最新状态
         return await self.get(chat_session_id)
+    
+    async def mark_deleted(self, chat_session_id: int) -> None:
+        """标记会话为已删除（软删除）"""
+        stmt = (
+            update(ChatSessionModel)
+            .where(ChatSessionModel.id == chat_session_id)
+            .values(deleted_at=datetime.utcnow())
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()

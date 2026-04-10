@@ -184,3 +184,22 @@ class ChatSessionService:
         # 反转：从主线到当前线程
         chain.reverse()
         return chain
+    
+    async def delete_session(
+        self,
+        user_id: int,
+        chat_session_id: int,
+    ) -> None:
+        """
+        删除会话（软删除，更新状态）。
+
+        Returns:
+            None
+        """
+        session = await self.session_repo.get(chat_session_id)
+        if session is None:
+            raise NotFoundException("Chat session not found")
+        if session.user_id != user_id:
+            raise ForbiddenException("No permission to access this session")
+
+        await self.session_repo.mark_deleted(chat_session_id)

@@ -90,3 +90,13 @@ async def update_session(
         ),
     )
 
+@router.delete("/{chat_session_id}", response_model=BaseResponse[None])
+async def delete_session(
+    chat_session_id: int,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(db_session),
+) -> BaseResponse[None]:
+    """删除会话"""
+    service = ChatSessionService(db)
+    await service.delete_session(user_id=user_id, chat_session_id=chat_session_id)
+    return BaseResponse(code=0, message="success", data=None)
