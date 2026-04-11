@@ -17,8 +17,9 @@ from src.domain.models import Message, ModelConfig, ChatSession, Thread
 from src.domain.enums import MessageRole, MessageStatus, MessageType, ThreadStatus
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.app.services.session_title_service import SessionTitleService
-from src.core.exceptions import AppException, ExternalServiceException, InternalServerException, BadRequestException
+from src.core.exceptions import AppException, InternalServerException, BadRequestException
 from src.core.config.model_config import model_setting
+from src.llm.provider.utils import to_external_service_exception
 from src.api.schemas.chat import (
     StreamEventType,
     StreamToken,
@@ -28,40 +29,6 @@ from src.api.schemas.chat import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _classify_llm_error(e: Exception) -> tuple[str, str]:
-    """根据 LLM 提供商异常推断错误类型和用户友好消息。
-
-    Returns:
-        (error_type, user_message)
-    """
-    # 优先通过 openai SDK 异常类型判断
-    try:
-        from openai import RateLimitError, AuthenticationError, APITimeoutError, APIConnectionError
-        if isinstance(e, RateLimitError):
-            return "quota_exceeded", "API 额度已耗尽或请求频率过高，请稍后再试"
-        if isinstance(e, AuthenticationError):
-            return "auth_error", "API Key 无效或已过期，请检查模型配置"
-        if isinstance(e, APITimeoutError):
-            return "timeout", "LLM 服务响应超时，请稍后再试"
-        if isinstance(e, APIConnectionError):
-            return "connection_error", "无法连接 LLM 服务，请检查网络或服务地址"
-    except ImportError:
-        pass
-
-    # 兜底：基于错误信息关键词匹配
-    msg = str(e).lower()
-    if any(kw in msg for kw in ("rate limit", "quota", "429", "insufficient_quota")):
-        return "quota_exceeded", "API 额度已耗尽或请求频率过高，请稍后再试"
-    if any(kw in msg for kw in ("authentication", "api key", "401", "unauthorized")):
-        return "auth_error", "API Key 无效或已过期，请检查模型配置"
-    if "timeout" in msg:
-        return "timeout", "LLM 服务响应超时，请稍后再试"
-    if any(kw in msg for kw in ("connection", "connect")):
-        return "connection_error", "无法连接 LLM 服务，请检查网络或服务地址"
-
-    return "llm_error", "LLM 服务异常，请稍后再试"
 
 
 class ChatService:
@@ -168,13 +135,10 @@ class ChatService:
         except AppException:
             raise
         except Exception as e:
-            error_type, user_msg = _classify_llm_error(e)
+            business_error = to_external_service_exception(e, code=5001)
+            error_type = (business_error.details or {}).get("error_type", "llm_error")
             logger.error("LLM invocation failed [%s]: %s", error_type, e, exc_info=True)
-            raise ExternalServiceException(
-                message=user_msg,
-                code=5001,
-                details={"error_type": error_type},
-            ) from None
+            raise business_error from None
             
     
     async def _invoke_llm_stream(self, content: str, thread_id: int, model_config: ModelConfig) -> AsyncGenerator[str, None]:
@@ -224,13 +188,10 @@ class ChatService:
         except AppException:
             raise
         except Exception as e:
-            error_type, user_msg = _classify_llm_error(e)
+            business_error = to_external_service_exception(e, code=5001)
+            error_type = (business_error.details or {}).get("error_type", "llm_error")
             logger.error("LLM stream failed [%s]: %s", error_type, e, exc_info=True)
-            raise ExternalServiceException(
-                message=user_msg,
-                code=5001,
-                details={"error_type": error_type},
-            ) from None
+            raise business_error from None
 
     async def _create_new_session_and_thread(
         self,

@@ -1,6 +1,6 @@
 from pydantic import SecretStr
 
-from src.llm.provider import get_tongyi_model
+from src.llm.provider.tongyi import get_tongyi_model
 
 def get_model(
     config: dict
