@@ -451,7 +451,6 @@ class ChatService:
             ai_content = await self._invoke_llm(content, thread_id, model_config)
         except Exception as e:
             # LLM/系统错误：用独立 session 保存部分内容，标记 ERROR
-            await self.thread_repo.update_status(thread_id, ThreadStatus.ERROR)  # 标记线程异常
             raise e  # 向上抛出，由 endpoint 层 except Exception 捕获并返回错误响应
         # 5. Save AI message
         ai_message = Message(

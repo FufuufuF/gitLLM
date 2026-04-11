@@ -21,4 +21,3 @@ class ThreadType(IntEnum):
 class ThreadStatus(IntEnum):
     NORMAL = 1
     MERGED = 2
-    ERROR = 3
