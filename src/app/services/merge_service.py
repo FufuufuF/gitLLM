@@ -1,4 +1,4 @@
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -214,7 +214,13 @@ class MergeService:
     async def _inject_brief_to_checkpoint(
         self, parent_thread_id: int, brief_content: str
     ) -> None:
-        """向父线程的 checkpoint 注入简报 SystemMessage"""
+        """向父线程的 checkpoint 注入学习简报 UserMessage（带 XML 标签）"""
+        wrapped = (
+            "<branch_learning_brief>\n"
+            "这是一条系统在分支合并时注入的学习简报，仅作为后续推理的背景参考，不需要单独回应。\n\n"
+            f"{brief_content}\n"
+            "</branch_learning_brief>"
+        )
         async with get_postgres_saver() as saver:
             graph = create_chat_graph(postgres_saver=saver)
             config = RunnableConfig(
@@ -222,5 +228,5 @@ class MergeService:
             )
             await graph.aupdate_state(
                 config,
-                {"messages": [SystemMessage(content=brief_content)]},
+                {"messages": [HumanMessage(content=wrapped)]},
             )
