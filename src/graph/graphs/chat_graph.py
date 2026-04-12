@@ -18,14 +18,15 @@ def create_chat_graph(postgres_saver: Optional[AsyncPostgresSaver] = None):
 if __name__ == "__main__":
     graph = create_chat_graph()
 
-    from src.core.config.model_config import model_setting
+    from src.core.config.model_config import get_model_config_from_env
     from langchain_core.runnables import RunnableConfig
+    model_config = get_model_config_from_env("kimi")
     config = {
         "configurable": {
-            "model_name": model_setting.QWEN_MODEL_NAME,
-            "api_key": model_setting.QWEN_MODEL_API_KEY,
-            "provider": model_setting.QWEN_MODEL_PROVIDER,
-            "base_url": model_setting.QWEN_MODEL_BASE_URL,
+            "model_name": model_config.model_name,
+            "api_key": model_config.api_key,
+            "provider": model_config.provider,
+            "base_url": model_config.base_url,
         }
     }
     initial_state = {

@@ -18,7 +18,7 @@ from src.domain.enums import MessageRole, MessageStatus, MessageType, ThreadStat
 from src.graph.graphs.chat_graph import create_chat_graph
 from src.app.services.session_title_service import SessionTitleService
 from src.core.exceptions import AppException, InternalServerException, BadRequestException
-from src.core.config.model_config import model_setting
+from src.core.config.model_config import get_model_config_from_env
 from src.llm.provider.utils import to_external_service_exception
 from src.api.schemas.chat import (
     StreamEventType,
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 class ChatService:
     # 持有后台任务的强引用，防止 GC 在任务完成前将其回收
     _background_tasks: set[asyncio.Task] = set()
+    _DEFAULT_MODEL_KEY = "kimi"
 
     def __init__(
         self,
@@ -54,21 +55,16 @@ class ChatService:
         cls._background_tasks.add(task)
         task.add_done_callback(cls._background_tasks.discard)
 
-    async def get_model_config(self, model_config_id: int) -> ModelConfig:
-        # MOCK
-        model_config = ModelConfig(
-            id=1,
-            model_name=model_setting.QWEN_MODEL_NAME,
-            api_key=model_setting.QWEN_MODEL_API_KEY,
-            provider=model_setting.QWEN_MODEL_PROVIDER if model_setting.QWEN_MODEL_PROVIDER else "Tongyi",
-            base_url=model_setting.QWEN_MODEL_BASE_URL,
-            user_id=1
-        )
-        return model_config
-        model_config = await self.model_config_repo.get(model_config_id)
-        if not model_config:
-            raise InternalServerException(f"Model config with id {model_config_id} not found")
-        return model_config
+    async def get_model_config(self, model_key: str | None = None) -> ModelConfig:
+        """Read model config from env by model key before DB config is enabled."""
+        try:
+            return get_model_config_from_env(
+                model_key=model_key or self._DEFAULT_MODEL_KEY,
+                config_id=1,
+                user_id=1,
+            )
+        except ValueError as exc:
+            raise InternalServerException(str(exc)) from exc
 
 
     async def _save_message(self, message: Message) -> Message:
@@ -240,7 +236,7 @@ class ChatService:
         """为新会话生成标题（失败时返回兜底标题）。"""
         session_title_service = SessionTitleService()
         try:
-            model_config = await self.get_model_config(1)
+            model_config = await self.get_model_config()
             return await session_title_service.generate_title(
                 first_user_message=first_user_message,
                 model_config=model_config,
@@ -323,7 +319,7 @@ class ChatService:
                 ),
             )
         
-        model_config = await self.get_model_config(1)
+        model_config = await self.get_model_config()
         full_ai_content = ""
 
         try:
@@ -444,7 +440,7 @@ class ChatService:
         human_message = await self._save_message(human_message)
 
         # 3. Get model config
-        model_config = await self.get_model_config(1)
+        model_config = await self.get_model_config()
 
         # 4. Invoke LLM
         try:

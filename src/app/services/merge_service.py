@@ -2,7 +2,7 @@ from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.config.model_config import model_setting
+from src.core.config.model_config import get_model_config_from_env
 from src.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from src.domain.enums import MessageRole, MessageType, ThreadStatus, ThreadType
 from src.domain.models import BranchOp, Message, Thread
@@ -198,11 +198,12 @@ class MergeService:
         prompt = f"{system_prompt}\n\n---\n\n{conversation}\n\n---\n\nPlease generate the brief:"
 
         try:
+            model_config = get_model_config_from_env("kimi")
             model = get_model({
-                "provider": model_setting.QWEN_MODEL_PROVIDER or "tongyi",
-                "api_key": model_setting.QWEN_MODEL_API_KEY,
-                "model_name": model_setting.QWEN_MODEL_NAME,
-                "base_url": model_setting.QWEN_MODEL_BASE_URL,
+                "provider": model_config.provider,
+                "api_key": model_config.api_key,
+                "model_name": model_config.model_name,
+                "base_url": model_config.base_url,
             })
             result = await model.ainvoke(prompt)
             return str(result.content)
