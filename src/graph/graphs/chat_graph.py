@@ -6,12 +6,18 @@ from langgraph.graph import START, StateGraph, END
 from langchain.messages import HumanMessage
 
 from src.graph.state import GraphState
+from src.graph.nodes.compact_context import compact_context
 from src.graph.nodes.generate_reply import generate_reply
+from src.graph.nodes.normalize_messages import normalize_messages
 
 def create_chat_graph(postgres_saver: Optional[AsyncPostgresSaver] = None):
     workflow = StateGraph(GraphState)
+    workflow.add_node("normalize_messages", normalize_messages)
+    workflow.add_node("compact_context", compact_context)
     workflow.add_node("generate_reply", generate_reply)
-    workflow.add_edge(START, "generate_reply")
+    workflow.add_edge(START, "normalize_messages")
+    workflow.add_edge("normalize_messages", "compact_context")
+    workflow.add_edge("compact_context", "generate_reply")
     workflow.add_edge("generate_reply", END)
     return workflow.compile(checkpointer=postgres_saver)
 
