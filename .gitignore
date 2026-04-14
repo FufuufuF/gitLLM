@@ -62,3 +62,6 @@ secrets.json
 
 # docs
 docs/
+
+# Coding Agent
+.claude/
