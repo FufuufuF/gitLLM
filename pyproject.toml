@@ -50,4 +50,5 @@ select = ["E", "F", "I", "UP"]
 [dependency-groups]
 dev = [
     "mycli>=1.49.0",
+    "pytest>=9.0.3",
 ]

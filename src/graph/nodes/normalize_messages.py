@@ -4,6 +4,7 @@ import re
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
+from src.graph.nodes.compact_context import is_compaction_summary
 from src.graph.state import GraphState
 
 # 用于识别学习简报的 XML 标签
@@ -18,13 +19,28 @@ def _is_branch_brief(message: BaseMessage) -> bool:
     return bool(_BRIEF_PATTERN.search(text))
 
 
+def _is_special_message(message: BaseMessage) -> bool:
+    """判断一条消息是否是系统特殊消息（压缩摘要、学习简报等），不应参与归一化。"""
+    return is_compaction_summary(message) or _is_branch_brief(message)
+
+
 def _find_trailing_human_run(messages: list[BaseMessage]) -> int:
-    """返回尾部连续 HumanMessage 片段的起始索引；如果尾部只有 0 或 1 条 HumanMessage，返回 -1"""
+    """返回尾部连续 HumanMessage 片段的起始索引；如果尾部只有 0 或 1 条 HumanMessage，返回 -1
+
+    注意：压缩摘要 HumanMessage 不参与尾部连续段的判定。
+    """
     if not messages or not isinstance(messages[-1], HumanMessage):
+        return -1
+
+    # 压缩摘要不应该出现在尾部（它应在更早的位置），但防御性排除
+    if is_compaction_summary(messages[-1]):
         return -1
 
     start = len(messages) - 1
     while start > 0 and isinstance(messages[start - 1], HumanMessage):
+        # 遇到压缩摘要时停止回溯，它不属于尾部连续段
+        if is_compaction_summary(messages[start - 1]):
+            break
         start -= 1
 
     # 连续段长度 <= 1 不需要归一化
@@ -41,6 +57,7 @@ def normalize_messages(state: GraphState, config: RunnableConfig) -> dict:
     - 识别学习简报 HumanMessage 和真实用户输入。
     - 合并时用 XML 标签区分各部分。
     - 返回新的 messages 列表（仅当发生了合并时才改写）。
+    - 压缩摘要 HumanMessage（<context_compaction_summary>）不参与归一化。
     """
     messages = list(state.messages)
     start = _find_trailing_human_run(messages)

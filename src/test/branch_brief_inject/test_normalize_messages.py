@@ -4,12 +4,17 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
+from src.graph.nodes.compact_context import is_compaction_summary
 from src.graph.nodes.normalize_messages import (
     _find_trailing_human_run,
     _is_branch_brief,
     normalize_messages,
 )
 from src.graph.state import GraphState
+from src.core.config.context_compaction_config import (
+    COMPACTION_SUMMARY_OPEN_TAG,
+    COMPACTION_SUMMARY_CLOSE_TAG,
+)
 
 
 def _make_brief(content: str = "测试简报内容") -> HumanMessage:
@@ -26,6 +31,13 @@ def _make_brief(content: str = "测试简报内容") -> HumanMessage:
 def _make_user(content: str) -> HumanMessage:
     """构造一条普通用户消息"""
     return HumanMessage(content=content)
+
+
+def _make_compaction_summary(content: str = "这是压缩摘要") -> HumanMessage:
+    """构造一条上下文压缩摘要 HumanMessage"""
+    return HumanMessage(
+        content=f"{COMPACTION_SUMMARY_OPEN_TAG}\n{content}\n{COMPACTION_SUMMARY_CLOSE_TAG}"
+    )
 
 
 _EMPTY_CONFIG = RunnableConfig({"configurable": {}})
@@ -50,6 +62,41 @@ class TestIsBranchBrief:
     def test_system_message_not_brief(self):
         msg = SystemMessage(content="<branch_learning_brief>fake</branch_learning_brief>")
         assert _is_branch_brief(msg) is False
+
+    def test_compaction_summary_not_brief(self):
+        """压缩摘要不应该被识别为学习简报"""
+        msg = _make_compaction_summary("摘要内容")
+        assert _is_branch_brief(msg) is False
+
+
+# ── is_compaction_summary 测试 ──
+
+
+class TestIsCompactionSummary:
+    def test_compaction_summary_detected(self):
+        msg = _make_compaction_summary("摘要内容")
+        assert is_compaction_summary(msg) is True
+
+    def test_plain_human_not_summary(self):
+        msg = _make_user("你好")
+        assert is_compaction_summary(msg) is False
+
+    def test_brief_not_summary(self):
+        """学习简报不应该被识别为压缩摘要"""
+        msg = _make_brief("简报内容")
+        assert is_compaction_summary(msg) is False
+
+    def test_ai_message_not_summary(self):
+        msg = AIMessage(
+            content=f"{COMPACTION_SUMMARY_OPEN_TAG}\nfake\n{COMPACTION_SUMMARY_CLOSE_TAG}"
+        )
+        assert is_compaction_summary(msg) is False
+
+    def test_system_message_not_summary(self):
+        msg = SystemMessage(
+            content=f"{COMPACTION_SUMMARY_OPEN_TAG}\nfake\n{COMPACTION_SUMMARY_CLOSE_TAG}"
+        )
+        assert is_compaction_summary(msg) is False
 
 
 # ── _find_trailing_human_run 测试 ──
@@ -78,6 +125,25 @@ class TestFindTrailingHumanRun:
             _make_brief("b2"),
             _make_user("q"),
         ]
+        assert _find_trailing_human_run(msgs) == 1
+
+    def test_compaction_summary_breaks_trailing_run(self):
+        """压缩摘要 HumanMessage 应中断尾部连续段的回溯"""
+        summary = _make_compaction_summary("摘要")
+        msgs = [summary, _make_user("q")]
+        # 只有 1 条普通 HumanMessage（摘要中断了回溯），不需要归一化
+        assert _find_trailing_human_run(msgs) == -1
+
+    def test_compaction_summary_at_tail_ignored(self):
+        """尾部是压缩摘要时不触发归一化"""
+        summary = _make_compaction_summary("摘要")
+        msgs = [_make_user("q"), summary]
+        assert _find_trailing_human_run(msgs) == -1
+
+    def test_compaction_summary_does_not_participate_in_trailing(self):
+        """压缩摘要后面跟着 brief + user：brief 和 user 构成连续段，但摘要不参与"""
+        summary = _make_compaction_summary("摘要")
+        msgs = [summary, _make_brief("简报"), _make_user("问题")]
         assert _find_trailing_human_run(msgs) == 1
 
 
@@ -206,3 +272,30 @@ class TestNormalizeMessages:
         assert merged_content.count("</branch_learning_brief>") == 1
         assert merged_content.count("<user_message>") == 1
         assert merged_content.count("</user_message>") == 1
+
+    def test_compaction_summary_preserved_before_trailing(self):
+        """压缩摘要在尾部连续段之前，归一化不应影响它"""
+        summary = _make_compaction_summary("历史摘要")
+        brief = _make_brief("简报")
+        user = _make_user("问题")
+
+        state = GraphState(messages=[summary, brief, user])
+        result = normalize_messages(state, _EMPTY_CONFIG)
+
+        new_messages = result["messages"]
+        # 摘要保持不变 + 1 条归一化后的消息
+        assert len(new_messages) == 2
+        assert is_compaction_summary(new_messages[0])
+        assert isinstance(new_messages[1], HumanMessage)
+        assert "<branch_learning_brief>" in new_messages[1].content
+        assert "<user_message>" in new_messages[1].content
+
+    def test_compaction_summary_not_included_in_merge(self):
+        """压缩摘要不应被当作普通消息参与归一化合并"""
+        summary = _make_compaction_summary("历史摘要")
+        user = _make_user("问题")
+
+        state = GraphState(messages=[summary, user])
+        result = normalize_messages(state, _EMPTY_CONFIG)
+        # 压缩摘要中断了连续段，只剩 1 条普通 HumanMessage，不归一化
+        assert result == {}
