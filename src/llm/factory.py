@@ -1,5 +1,6 @@
 from pydantic import SecretStr
 
+from src.llm.provider.kimi import get_kimi_model
 from src.llm.provider.tongyi import get_tongyi_model
 
 def get_model(
@@ -12,5 +13,7 @@ def get_model(
 
     if provider == "tongyi":
         return get_tongyi_model(SecretStr(api_key), model_name, base_url) # type: ignore
+    elif provider == "kimi":
+        return get_kimi_model(SecretStr(api_key), model_name, base_url) # type: ignore
     else:
         raise ValueError(f"Unsupported provider: {provider}")
